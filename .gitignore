@@ -1,0 +1,51 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger Files
+*.pdb
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug information
+*.dwo
+*.d
+
+# Build directories
+build/
+vs2022/
+vs_build/
+
+# Installer build artifacts
+installer/innosetup/output/
+
+# Documentation (except README)
+*.md
+!README.md
+!PRIVACY.md
+
+# Claude Code
+.claude/

@@ -1,0 +1,170 @@
+name: Build and Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for tags
+
+    - name: Setup MSVC
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Setup CMake
+      uses: lukka/get-cmake@latest
+
+    - name: Get version from tag
+      id: get_version
+      shell: pwsh
+      run: |
+        $tag = "${{ github.ref_name }}"
+        $version = $tag -replace '^v', ''
+        Write-Host "Version: $version (tag: $tag)"
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "tag=$tag" >> $env:GITHUB_OUTPUT
+
+    - name: Update CMakeLists.txt version
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.version }}"
+        $cmakePath = "CMakeLists.txt"
+        $content = Get-Content $cmakePath -Raw
+        $content = $content -replace 'project\(DexPresenter VERSION \d+\.\d+\.\d+', "project(DexPresenter VERSION $version"
+        Set-Content $cmakePath -Value $content
+        Write-Host "Updated CMakeLists.txt to version $version"
+
+    - name: Update Version.h
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.version }}"
+        $parts = $version -split '\.'
+        $major = $parts[0]
+        $minor = $parts[1]
+        $patch = $parts[2]
+        $versionH = "src/Version.h"
+        $content = Get-Content $versionH -Raw
+        $content = $content -replace '#define DEXPRESENTER_VERSION\s+L"[^"]*"', "#define DEXPRESENTER_VERSION       L""$version"""
+        $content = $content -replace '#define DEXPRESENTER_VERSION_MAJOR \d+', "#define DEXPRESENTER_VERSION_MAJOR $major"
+        $content = $content -replace '#define DEXPRESENTER_VERSION_MINOR \d+', "#define DEXPRESENTER_VERSION_MINOR $minor"
+        $content = $content -replace '#define DEXPRESENTER_VERSION_PATCH \d+', "#define DEXPRESENTER_VERSION_PATCH $patch"
+        Set-Content $versionH -Value $content
+        Write-Host "Updated Version.h to $version"
+
+    - name: Update RC file version
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.version }}"
+        $parts = $version -split '\.'
+        $major = $parts[0]; $minor = $parts[1]; $patch = $parts[2]
+        $commaVer = "$major,$minor,$patch,0"
+        $dotVer   = "$major.$minor.$patch.0"
+
+        $rcFile = "resources/DexPresenter.rc"
+        $content = Get-Content $rcFile -Raw
+        $content = $content -replace 'FILEVERSION\s+[\d,]+',    "FILEVERSION     $commaVer"
+        $content = $content -replace 'PRODUCTVERSION\s+[\d,]+', "PRODUCTVERSION  $commaVer"
+        $content = $content -replace '"FileVersion",\s+"[^"]*"',    """FileVersion"",       ""$dotVer"""
+        $content = $content -replace '"ProductVersion",\s+"[^"]*"', """ProductVersion"",    ""$dotVer"""
+        Set-Content $rcFile -Value $content
+        Write-Host "Updated $rcFile to $dotVer"
+
+    - name: Configure CMake
+      run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+    - name: Build Release
+      run: cmake --build build --config Release
+
+    - name: Run Tests
+      shell: pwsh
+      run: |
+        $testExe = "build/Release/DexPresenterTests.exe"
+        if (Test-Path $testExe) {
+          & $testExe
+          if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
+          Write-Host "All tests passed"
+        } else {
+          Write-Host "Test executable not found, skipping tests"
+        }
+
+    - name: Prepare portable readme
+      shell: pwsh
+      run: |
+        Copy-Item "Distribute/PortableReadme.txt" -Destination "portable_readme.txt"
+        Write-Host "Copied PortableReadme.txt for portable package"
+
+    - name: Create Portable Package
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.version }}"
+
+        # Create staging directory
+        New-Item -ItemType Directory -Force -Path "package"
+
+        # Copy files
+        Copy-Item "build/Release/DexPresenter.exe" -Destination "package/"
+        Copy-Item "LICENSE" -Destination "package/"
+        Copy-Item "portable_readme.txt" -Destination "package/readme.txt"
+
+        # Create zip
+        Compress-Archive -Path "package/*" -DestinationPath "Portable_DexPresenter.zip" -Force
+
+        Write-Host "Created Portable_DexPresenter.zip with contents:"
+        Get-ChildItem "package"
+
+    - name: Build Inno Setup Installer
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.version }}"
+        Write-Host "Building Inno Setup installer version $version"
+
+        # Copy build output to where the .iss expects it (build/)
+        # VS generator puts output in Release/ subfolder
+        Copy-Item "build/Release/DexPresenter.exe" -Destination "build/" -Force
+
+        # Create a source archive for distribution
+        Compress-Archive -Path "src/*" -DestinationPath "build/DexPresenter_Sources.zip" -Force
+
+        # Inno Setup 6 is pre-installed on windows-latest runners
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=$version "installer\innosetup\DexPresenter.iss"
+        if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
+
+        $setupFile = "installer\innosetup\output\DexPresenter_${version}_Setup.exe"
+        if (Test-Path $setupFile) {
+          Copy-Item $setupFile "DexPresenter_${version}_Setup.exe"
+          Write-Host "Installer created: DexPresenter_${version}_Setup.exe"
+        } else {
+          Write-Error "Installer not found at $setupFile"
+          exit 1
+        }
+
+    - name: Prepare release notes
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.version }}"
+        $body = Get-Content "Distribute/RELEASE_TEMPLATE.md" -Raw
+        $body = $body -replace '\$\{VERSION\}', $version
+        Set-Content "release_notes.md" -Value $body
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.tag }}
+        name: DexPresenter ${{ steps.get_version.outputs.tag }}
+        body_path: release_notes.md
+        files: |
+          Portable_DexPresenter.zip
+          DexPresenter_${{ steps.get_version.outputs.version }}_Setup.exe
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
