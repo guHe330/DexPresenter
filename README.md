@@ -5,7 +5,7 @@
 [![Latest release](https://img.shields.io/github/v/release/guHe330/DexPresenter?include_prereleases)](https://github.com/guHe330/DexPresenter/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%2011-0078d4.svg)](#key-information)
 
-DexPresenter is a lightweight presentation tool: under 500 KB, no telemetry, no dependencies.
+DexPresenter is a lightweight presentation tool: under 600 KB, no telemetry, no dependencies.
 
 - Zoom into your screen during presentations
 - Draw arrows, highlights, and shapes
@@ -29,7 +29,7 @@ It is inspired by [ZoomIt](https://learn.microsoft.com/en-us/windows/powertoys/z
 
 - **Status**: Alpha
 - **Technology**: Native C++23 (Win32 API)
-- **Executable Size**: ~400 KB
+- **Executable Size**: ~540 KB
 - **Platform**: Windows 11
 - **License**: GPLv3
 
@@ -89,7 +89,7 @@ It is inspired by [ZoomIt](https://learn.microsoft.com/en-us/windows/powertoys/z
 ### Performance and Efficiency
 
 - **Native Code**: Written in C++ using Win32 API for minimal resource usage and zero runtime overhead
-- **Small Footprint**: ~400 KB standalone executable with no external dependencies (static CRT)
+- **Small Footprint**: ~540 KB standalone executable with no external dependencies (static CRT), including all embedded icon resources
 - **Instant Startup**: No JIT compilation or managed runtime delays
 
 ## Installation
