@@ -6,7 +6,7 @@ IDI_DEXPRESENTER ICON "DexPresenter.ico"
 
 // Toolbar PNG icons
 IDB_TOOLBAR_SNIP  RCDATA "icons/snip.png"
-IDB_TOOLBAR_DRAW  RCDATA "icons/Drwa.png"
+IDB_TOOLBAR_DRAW  RCDATA "icons/Draw.png"
 IDB_TOOLBAR_TIMER RCDATA "icons/Timer.png"
 IDB_TOOLBAR_ZOOM  RCDATA "icons/Zoom.png"
 

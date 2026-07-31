@@ -1,0 +1,43 @@
+DexPresenter - Third-Party Notices
+==================================
+
+DexPresenter itself is licensed under the GNU General Public License v3.0
+(see LICENSE). Image assets are excluded from that license and carry separate
+terms (see resources/ICON_LICENSE.txt).
+
+This file lists third-party software used by DexPresenter and the licenses
+those components are governed by. Each dependency remains subject to its own
+license terms.
+
+
+1. SHIPPED IN THE DISTRIBUTED BINARY
+------------------------------------
+
+GDI+
+  Vendor:  Microsoft Corporation
+  Source:  Part of the Windows SDK / Windows operating system
+  Notes:   Linked as gdiplus.lib. Governed by the Microsoft Windows SDK
+           license terms; redistributed as an operating system component
+           rather than bundled with DexPresenter.
+
+Windows system libraries
+  Vendor:  Microsoft Corporation
+  Source:  Part of the Windows SDK / Windows operating system
+  Notes:   user32, gdi32, shell32, ole32, comctl32, comdlg32, shlwapi,
+           msimg32. Operating system components, linked by import library.
+
+The DexPresenter binary is built with the static C runtime and bundles no
+other third-party code.
+
+
+2. BUILD AND TEST ONLY (NOT DISTRIBUTED)
+----------------------------------------
+
+Google Test 1.14.0
+  License: BSD 3-Clause
+  Source:  https://github.com/google/googletest
+  Notes:   Fetched at configure time via CMake FetchContent and linked only
+           into the DexPresenterTests target. It is not part of
+           DexPresenter.exe and is not redistributed in any release artifact.
+
+  BSD 3-Clause License text: https://github.com/google/googletest/blob/main/LICENSE
