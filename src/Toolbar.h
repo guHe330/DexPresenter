@@ -49,10 +49,12 @@ private:
     int m_hoverIndex = -1;
     bool m_classRegistered = false;
 
-    // Toolbar PNG icons loaded from embedded resources (indices match button order 0-3)
-    Gdiplus::Bitmap* m_icons[4] = {};
-
     static constexpr int NUM_BUTTONS = 5; // Snip, Draw, Timer, Zoom, Close
-    static constexpr int ICON_RENDER_W = 28;
-    static constexpr int ICON_RENDER_H = 26;
+
+    // Toolbar PNG icons loaded from embedded resources (indices match button order)
+    Gdiplus::Bitmap* m_icons[NUM_BUTTONS] = {};
+
+    // Icons are 32x32 and drawn 1:1 inside the 36px button, so they never resample
+    static constexpr int ICON_RENDER_W = 32;
+    static constexpr int ICON_RENDER_H = 32;
 };

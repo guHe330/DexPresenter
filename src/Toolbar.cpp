@@ -113,9 +113,11 @@ Toolbar::Toolbar(App* app, HINSTANCE hInstance) : m_app(app), m_hInstance(hInsta
         SendMessageW(m_hwndTooltip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     }
 
-    // Load toolbar icons from embedded resources (order: Snip, Draw, Timer, Zoom)
-    static const int iconResIds[] = { IDB_TOOLBAR_SNIP, IDB_TOOLBAR_DRAW, IDB_TOOLBAR_TIMER, IDB_TOOLBAR_ZOOM };
-    for (int i = 0; i < 4; i++)
+    // Load toolbar icons from embedded resources (order: Snip, Draw, Timer, Zoom, Close)
+    static const int iconResIds[NUM_BUTTONS] = {
+        IDB_TOOLBAR_SNIP, IDB_TOOLBAR_DRAW, IDB_TOOLBAR_TIMER, IDB_TOOLBAR_ZOOM, IDB_TOOLBAR_CLOSE
+    };
+    for (int i = 0; i < NUM_BUTTONS; i++)
         m_icons[i] = LoadPngResource(hInstance, iconResIds[i]);
 
     if (cfg.visible) Show();
@@ -232,15 +234,15 @@ void Toolbar::Paint(HDC hdc) {
             graphics.FillPath(&hoverBrush, &hoverPath);
         }
 
-        if (i < 4 && m_icons[i]) {
-            // Draw PNG icon centered in button, scaled to ICON_RENDER_W x ICON_RENDER_H
+        if (m_icons[i]) {
+            // Draw PNG icon centered in button at ICON_RENDER_W x ICON_RENDER_H
             float ix = btnRect.X + (btnRect.Width  - ICON_RENDER_W) / 2.0f;
             float iy = btnRect.Y + (btnRect.Height - ICON_RENDER_H) / 2.0f;
             graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
             graphics.DrawImage(m_icons[i],
                 Gdiplus::RectF(ix, iy, (float)ICON_RENDER_W, (float)ICON_RENDER_H));
-        } else {
-            // Close button — draw × text
+        } else if (i == NUM_BUTTONS - 1) {
+            // Close icon unavailable — fall back to a × glyph
             Gdiplus::Color textColor = (i == m_hoverIndex)
                 ? Theme::Danger()
                 : Gdiplus::Color(255, Theme::DN_R, Theme::DN_G, Theme::DN_B);

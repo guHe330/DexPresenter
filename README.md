@@ -142,20 +142,23 @@ screenshotDir =
 
 ## Color Scheme
 
-DexPresenter uses a dark grey + pink theme:
+DexPresenter uses a dark plum + pink theme. A single palette covers both the
+interface and the artwork, so the toolbar, dialogs, and icons match exactly.
+It is defined once in [src/Constants.h](src/Constants.h) as `namespace Theme`;
+use these values for new UI *and* for new icons.
 
-| Role           | Color       | Hex       |
-| -------------- | ----------- | --------- |
-| Background     | Near-black  | `#1A1A1E` |
-| Surface        | Dark grey   | `#2A2A30` |
-| Surface hover  | Medium grey | `#3A3A42` |
-| Border         | Subtle grey | `#4A4A52` |
-| Text primary   | Light grey  | `#E8E8EC` |
-| Text secondary | Muted grey  | `#9898A0` |
-| Accent         | Pink        | `#E8608C` |
-| Accent hover   | Light pink  | `#F07098` |
-| Accent dim     | Dark pink   | `#B84870` |
-| Danger         | Red         | `#C85050` |
+| Role           | Color       | Hex       | Used for                                          |
+| -------------- | ----------- | --------- | ------------------------------------------------- |
+| Background     | Near-black  | `#141218` | Toolbar and overlay backdrops; icon page backdrop |
+| Surface        | Dark plum   | `#211F26` | Elevated panels and popouts; icon tile interior   |
+| Surface hover  | Plum grey   | `#3B3940` | Hover states                                      |
+| Border         | Muted grey  | `#565359` | Subtle borders, separators, the toolbar grip      |
+| Text primary   | Off-white   | `#F2EEF4` | Main text, button labels, icon glyph strokes      |
+| Text secondary | Muted plum  | `#99969C` | Hints and secondary labels                        |
+| Accent         | Pink        | `#E64A81` | Buttons, highlights, icon tile borders            |
+| Accent hover   | Light pink  | `#F7659F` | Hover state, icon highlight details               |
+| Accent dim     | Dark maroon | `#662E46` | Pressed/active; the dim ring behind the icon dot  |
+| Danger         | Red         | `#E85555` | Close button, destructive actions                 |
 
 ## Testing
 

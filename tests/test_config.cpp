@@ -29,9 +29,10 @@ TEST(AppConfig, DefaultValues) {
     EXPECT_FLOAT_EQ(c.zoom.defaultZoomLevel, 2.0f);
     EXPECT_EQ(c.draw.hotkey.vkey, '2');
     EXPECT_EQ(c.draw.freehand.width, 3);
-    EXPECT_EQ(c.draw.freehand.colorR, 232);
-    EXPECT_EQ(c.draw.freehand.colorG, 96);
-    EXPECT_EQ(c.draw.freehand.colorB, 140);
+    // Theme accent #E64A81 — see the palette in Constants.h
+    EXPECT_EQ(c.draw.freehand.colorR, 230);
+    EXPECT_EQ(c.draw.freehand.colorG, 74);
+    EXPECT_EQ(c.draw.freehand.colorB, 129);
     EXPECT_EQ(c.timer.hotkey.vkey, '3');
     EXPECT_EQ(c.timer.durationSeconds, 600);
     EXPECT_EQ(c.snip.hotkey.vkey, '6');

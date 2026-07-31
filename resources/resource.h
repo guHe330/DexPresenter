@@ -11,6 +11,7 @@
 #define IDB_TOOLBAR_DRAW     111
 #define IDB_TOOLBAR_TIMER    112
 #define IDB_TOOLBAR_ZOOM     113
+#define IDB_TOOLBAR_CLOSE    114
 
 // Tray menu commands
 #define IDM_SHOW_TOOLBAR 201

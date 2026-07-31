@@ -42,8 +42,11 @@ struct ShapeStyle {
 
 struct DrawConfig {
     HotkeyConfig hotkey = { MOD_CONTROL, '2' };
-    ShapeStyle freehand = { 232, 96, 140, 3 };  // Theme pink
-    ShapeStyle arrow    = { 232, 96, 140, 3 };  // Theme pink
+    // Theme accent #E64A81. Kept as literals rather than Theme:: constants so
+    // this header stays free of the GDI+ include (Config.cpp builds into the
+    // test binary, which does not link GDI+). Keep in sync with Constants.h.
+    ShapeStyle freehand = { 230, 74, 129, 3 };
+    ShapeStyle arrow    = { 230, 74, 129, 3 };
     ShapeStyle box      = { 0, 200, 0, 3 };
     ShapeStyle circle   = { 0, 0, 255, 3 };
     int lastMode = 0;       // ShapeMode enum value (persisted between sessions)

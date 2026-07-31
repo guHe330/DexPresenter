@@ -6,9 +6,10 @@ IDI_DEXPRESENTER ICON "DexPresenter.ico"
 
 // Toolbar PNG icons
 IDB_TOOLBAR_SNIP  RCDATA "icons/snip.png"
-IDB_TOOLBAR_DRAW  RCDATA "icons/Draw.png"
-IDB_TOOLBAR_TIMER RCDATA "icons/Timer.png"
-IDB_TOOLBAR_ZOOM  RCDATA "icons/Zoom.png"
+IDB_TOOLBAR_DRAW  RCDATA "icons/draw.png"
+IDB_TOOLBAR_TIMER RCDATA "icons/timer.png"
+IDB_TOOLBAR_ZOOM  RCDATA "icons/zoom.png"
+IDB_TOOLBAR_CLOSE RCDATA "icons/close.png"
 
 // Version information
 VS_VERSION_INFO VERSIONINFO

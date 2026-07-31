@@ -20,6 +20,7 @@
  */
 
 #include "SaveToast.h"
+#include "Constants.h"
 #include <string>
 
 static constexpr int TOAST_VISIBLE_MS = 3000;
@@ -88,7 +89,7 @@ static LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmp);
 
         // Background — same dark pill as the hints
-        HBRUSH hBg = CreateSolidBrush(RGB(30, 30, 30));
+        HBRUSH hBg = CreateSolidBrush(RGB(Theme::SF_R, Theme::SF_G, Theme::SF_B));
         FillRect(hdcMem, &rc, hBg);
         DeleteObject(hBg);
 
@@ -104,7 +105,7 @@ static LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
         SelectObject(hdcMem, hF1);
-        SetTextColor(hdcMem, RGB(235, 235, 235));
+        SetTextColor(hdcMem, RGB(Theme::TX_R, Theme::TX_G, Theme::TX_B));
         RECT r1 = {pad, pad, W - pad, mid};
         DrawTextW(hdcMem, d->line1.c_str(), -1, &r1,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -115,7 +116,7 @@ static LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
         SelectObject(hdcMem, hF2);
-        SetTextColor(hdcMem, RGB(130, 130, 130));
+        SetTextColor(hdcMem, RGB(Theme::TS_R, Theme::TS_G, Theme::TS_B));
         RECT r2 = {pad, mid, W - pad, H - pad};
         DrawTextW(hdcMem, d->line2.c_str(), -1, &r2,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

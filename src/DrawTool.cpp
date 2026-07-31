@@ -33,7 +33,7 @@ static const COLORREF g_palette[] = {
     RGB(0, 0, 255),       // Blue
     RGB(255, 255, 0),     // Yellow
     RGB(255, 165, 0),     // Orange
-    RGB(232, 96, 140),    // Theme pink
+    RGB(Theme::AC_R, Theme::AC_G, Theme::AC_B),  // Theme pink (accent)
     RGB(255, 255, 255),   // White
     RGB(0, 0, 0),         // Black
 };
@@ -214,12 +214,12 @@ void DrawTool::OnPaint(HDC hdc, int width, int height) {
         HBITMAP hOldHintBmp = (HBITMAP)SelectObject(hdcHint, hHintBmp);
 
         RECT boxRect = { 0, 0, boxW, boxH };
-        HBRUSH hBoxBrush = CreateSolidBrush(RGB(30, 30, 30));
+        HBRUSH hBoxBrush = CreateSolidBrush(RGB(Theme::SF_R, Theme::SF_G, Theme::SF_B));
         FillRect(hdcHint, &boxRect, hBoxBrush);
         DeleteObject(hBoxBrush);
 
         HFONT hOldHintFont = (HFONT)SelectObject(hdcHint, hHintFont);
-        SetTextColor(hdcHint, RGB(220, 220, 220));
+        SetTextColor(hdcHint, RGB(Theme::TX_R, Theme::TX_G, Theme::TX_B));
         SetBkMode(hdcHint, TRANSPARENT);
         DrawTextW(hdcHint, hintText, -1, &boxRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         SelectObject(hdcHint, hOldHintFont);

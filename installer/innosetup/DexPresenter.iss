@@ -17,6 +17,13 @@ DefaultGroupName={#MyAppName}
 OutputDir=output
 OutputBaseFilename=DexPresenter_{#MyAppVersion}_Setup
 SetupIconFile=..\..\resources\DexPresenter.ico
+; Without this, Windows picks the Add/Remove Programs icon itself.
+UninstallDisplayIcon={app}\{#MyAppExeName}
+; Branded wizard artwork. Inno 6 accepts PNG with transparency. Both are supplied
+; oversized (small 256x256; large 534x1022 at the required 164:314 aspect) so
+; Setup only ever shrinks them — upscaling is what looks blurry at high DPI.
+WizardImageFile=assets\WizardImage.png
+WizardSmallImageFile=assets\WizardSmallImage.png
 LicenseFile=..\..\LICENSE
 Compression=lzma2
 SolidCompression=yes

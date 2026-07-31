@@ -24,38 +24,45 @@
 #include <gdiplus.h>
 
 // ============================================================================
-// DexPresenter Color Scheme — Dark Grey + Pink
+// DexPresenter Color Scheme — Dark Plum + Pink
 // ============================================================================
 //
-//   Background:     #1A1A1E  (26, 26, 30)    — near-black with slight blue
-//   Surface:        #2A2A30  (42, 42, 48)    — elevated panels, popouts
-//   Surface hover:  #3A3A42  (58, 58, 66)    — hover states
-//   Border:         #4A4A52  (74, 74, 82)    — subtle borders
-//   Text primary:   #E8E8EC  (232,232,236)   — main text, button labels
-//   Text secondary: #9898A0  (152,152,160)   — hints, secondary labels
-//   Accent:         #E8608C  (232, 96,140)   — pink accent (buttons, highlights)
-//   Accent hover:   #F07098  (240,112,152)   — pink hover
-//   Accent dim:     #B84870  (184, 72,112)   — pink pressed/active
-//   Danger:         #C85050  (200, 80, 80)   — close button, destructive
+// One palette for everything: the values below are the same ones the icon
+// artwork in resources/ is drawn from, so the UI and the icons match exactly.
+// Roles the icon set does not name are taken from colors already present in
+// the artwork (marked "from art") rather than invented alongside it.
+//
+//   Background:     #141218  (20, 18, 24)    — near-black plum
+//   Surface:        #211F26  (33, 31, 38)    — elevated panels, icon tile fill
+//   Surface hover:  #3B3940  (59, 57, 64)    — hover states          (from art)
+//   Border:         #565359  (86, 83, 89)    — subtle borders        (from art)
+//   Text primary:   #F2EEF4  (242,238,244)   — main text, glyph white
+//   Text secondary: #99969C  (153,150,156)   — hints; primary text mixed 60%
+//                                              into the background
+//   Accent:         #E64A81  (230, 74,129)   — pink accent (buttons, highlights)
+//   Accent hover:   #F7659F  (247,101,159)   — pink hover
+//   Accent dim:     #662E46  (102, 46, 70)   — pressed/active; the dim ring
+//                                              behind the icon dot     (from art)
+//   Danger:         #E85555  (232, 85, 85)   — close button, destructive
 //
 namespace Theme {
     // Backgrounds
-    constexpr BYTE BG_R = 26,  BG_G = 26,  BG_B = 30;
-    constexpr BYTE SF_R = 42,  SF_G = 42,  SF_B = 48;   // Surface
-    constexpr BYTE SH_R = 58,  SH_G = 58,  SH_B = 66;   // Surface hover
-    constexpr BYTE BD_R = 74,  BD_G = 74,  BD_B = 82;   // Border
+    constexpr BYTE BG_R = 20,  BG_G = 18,  BG_B = 24;
+    constexpr BYTE SF_R = 33,  SF_G = 31,  SF_B = 38;   // Surface
+    constexpr BYTE SH_R = 59,  SH_G = 57,  SH_B = 64;   // Surface hover
+    constexpr BYTE BD_R = 86,  BD_G = 83,  BD_B = 89;   // Border
 
     // Text
-    constexpr BYTE TX_R = 232, TX_G = 232, TX_B = 236;  // Primary text
-    constexpr BYTE TS_R = 152, TS_G = 152, TS_B = 160;  // Secondary text
+    constexpr BYTE TX_R = 242, TX_G = 238, TX_B = 244;  // Primary text
+    constexpr BYTE TS_R = 153, TS_G = 150, TS_B = 156;  // Secondary text
 
     // Pink accent
-    constexpr BYTE AC_R = 232, AC_G = 96,  AC_B = 140;  // Accent
-    constexpr BYTE AH_R = 240, AH_G = 112, AH_B = 152;  // Accent hover
-    constexpr BYTE AD_R = 184, AD_G = 72,  AD_B = 112;  // Accent dim
+    constexpr BYTE AC_R = 230, AC_G = 74,  AC_B = 129;  // Accent
+    constexpr BYTE AH_R = 247, AH_G = 101, AH_B = 159;  // Accent hover
+    constexpr BYTE AD_R = 102, AD_G = 46,  AD_B = 70;   // Accent dim
 
     // Danger (close)
-    constexpr BYTE DN_R = 200, DN_G = 80,  DN_B = 80;
+    constexpr BYTE DN_R = 232, DN_G = 85,  DN_B = 85;
 
     // GDI+ helpers
     inline Gdiplus::Color Background(BYTE a = 240) { return Gdiplus::Color(a, BG_R, BG_G, BG_B); }
