@@ -131,8 +131,24 @@ jobs:
         # VS generator puts output in Release/ subfolder
         Copy-Item "build/Release/DexPresenter.exe" -Destination "build/" -Force
 
-        # Create a source archive for distribution
-        Compress-Archive -Path "src/*" -DestinationPath "build/DexPresenter_Sources.zip" -Force
+        # Create a complete, buildable source archive for GPL distribution.
+        # Must match the file list in build.ps1 so installer-only recipients
+        # receive the complete corresponding source they can rebuild from.
+        $archiveItems = @(
+          "src",
+          "tests",
+          "resources",
+          "installer",
+          "CMakeLists.txt",
+          "CMakePresets.json",
+          "README.md",
+          "LICENSE",
+          "PRIVACY.md",
+          "build.ps1",
+          ".gitignore"
+        )
+        $filesToZip = $archiveItems | Where-Object { Test-Path $_ }
+        Compress-Archive -Path $filesToZip -DestinationPath "build/DexPresenter_Sources.zip" -Force
 
         # Inno Setup 6 is pre-installed on windows-latest runners
         & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=$version "installer\innosetup\DexPresenter.iss"
@@ -165,6 +181,7 @@ jobs:
           Portable_DexPresenter.zip
           DexPresenter_${{ steps.get_version.outputs.version }}_Setup.exe
         draft: false
-        prerelease: false
+        # Alpha status (see README) — flip to false once the project leaves alpha.
+        prerelease: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,3 +1,24 @@
+/**
+ * DexPresenter - a free and open source Windows presentation utility with drawing tools
+ * Copyright (C) 2026 Gunter Heiss
+ *
+ * For more information see: https://dexpresenter.com
+ * The DexPresenter project is hosted on GitHub: https://github.com/guHe330/DexPresenter
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 #include <Windows.h>
 #include <gdiplus.h>
@@ -67,6 +88,7 @@ constexpr UINT WM_ACTIVATE_DRAW  = WM_USER + 11;
 constexpr UINT WM_ACTIVATE_TIMER = WM_USER + 12;
 constexpr UINT WM_ACTIVATE_SNIP  = WM_USER + 13;
 constexpr UINT WM_TOOL_FINISHED  = WM_USER + 20;
+constexpr UINT WM_SHOW_TOOLBAR   = WM_USER + 21;
 
 // Zoom defaults
 constexpr float ZOOM_DEFAULT_LEVEL = 2.0f;
@@ -97,4 +119,6 @@ constexpr int TOOLBAR_BUTTON_SIZE = 36;
 constexpr int TOOLBAR_PADDING     = 4;
 constexpr int TOOLBAR_HEIGHT      = TOOLBAR_BUTTON_SIZE + 2 * TOOLBAR_PADDING;
 constexpr int TOOLBAR_NUM_BUTTONS = 5; // 4 tools + close
-constexpr int TOOLBAR_WIDTH       = TOOLBAR_NUM_BUTTONS * (TOOLBAR_BUTTON_SIZE + TOOLBAR_PADDING) + TOOLBAR_PADDING;
+constexpr int TOOLBAR_GRIP_WIDTH  = 4;  // visible grip bar
+constexpr int TOOLBAR_GRIP_AREA   = 12; // clickable strip housing the grip (padding + bar + padding)
+constexpr int TOOLBAR_WIDTH       = TOOLBAR_NUM_BUTTONS * (TOOLBAR_BUTTON_SIZE + TOOLBAR_PADDING) + TOOLBAR_PADDING + TOOLBAR_GRIP_AREA;

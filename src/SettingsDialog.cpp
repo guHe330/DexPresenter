@@ -1,10 +1,33 @@
+/**
+ * DexPresenter - a free and open source Windows presentation utility with drawing tools
+ * Copyright (C) 2026 Gunter Heiss
+ *
+ * For more information see: https://dexpresenter.com
+ * The DexPresenter project is hosted on GitHub: https://github.com/guHe330/DexPresenter
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "SettingsDialog.h"
 #include "App.h"
 #include "Constants.h"
 #include "Version.h"
 #include <commctrl.h>
 #include <prsht.h>
+#include <shobjidl.h>
 #include <vector>
+#include <string>
 
 #pragma comment(lib, "comctl32.lib")
 
@@ -41,6 +64,11 @@ struct DialogTemplate {
     void AddCheckbox(const wchar_t* text, int id, int x, int y, int w, int h) {
         AddControl(text, id, 0x0080, x, y, w, h,
             BS_AUTOCHECKBOX | WS_CHILD | WS_VISIBLE | WS_TABSTOP);
+    }
+
+    void AddButton(const wchar_t* text, int id, int x, int y, int w, int h) {
+        AddControl(text, id, 0x0080, x, y, w, h,
+            BS_PUSHBUTTON | WS_CHILD | WS_VISIBLE | WS_TABSTOP);
     }
 
     void AddHotkey(int id, int x, int y, int w, int h) {
@@ -97,13 +125,46 @@ private:
 };
 
 // Control IDs
-#define IDC_HOTKEY_CTRL    1001
-#define IDC_ZOOM_LEVEL     1002
-#define IDC_PEN_WIDTH      1003
-#define IDC_TIMER_MINUTES  1004
-#define IDC_AUTOSTART      1005
-#define IDC_LABEL1         1010
-#define IDC_LABEL2         1011
+#define IDC_HOTKEY_CTRL           1001
+#define IDC_ZOOM_LEVEL            1002
+#define IDC_PEN_WIDTH             1003
+#define IDC_TIMER_MINUTES         1004
+#define IDC_AUTOSTART             1005
+#define IDC_SCREENSHOT_DIR        1006
+#define IDC_SCREENSHOT_DIR_BROWSE 1007
+#define IDC_LABEL1                1010
+#define IDC_LABEL2                1011
+#define IDC_LABEL3                1012
+
+// Show a folder picker. Returns true if the user chose a folder.
+static bool PickFolder(HWND owner, std::wstring& outPath) {
+    IFileOpenDialog* dialog = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(&dialog)))) {
+        return false;
+    }
+
+    DWORD opts = 0;
+    dialog->GetOptions(&opts);
+    dialog->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+    dialog->SetTitle(L"Choose screenshot folder");
+
+    bool ok = false;
+    if (SUCCEEDED(dialog->Show(owner))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dialog->GetResult(&item))) {
+            PWSTR path = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                outPath = path;
+                CoTaskMemFree(path);
+                ok = true;
+            }
+            item->Release();
+        }
+    }
+    dialog->Release();
+    return ok;
+}
 
 
 // --- General Page ---
@@ -112,13 +173,35 @@ INT_PTR CALLBACK SettingsDialog::GeneralProc(HWND hwnd, UINT msg, WPARAM wParam,
     case WM_INITDIALOG: {
         CheckDlgButton(hwnd, IDC_AUTOSTART,
             s_app->GetConfig().startWithWindows ? BST_CHECKED : BST_UNCHECKED);
+        std::wstring dir = Utf8ToWide(s_app->GetConfig().screenshotDir);
+        SetDlgItemTextW(hwnd, IDC_SCREENSHOT_DIR, dir.c_str());
         return TRUE;
+    }
+    case WM_COMMAND: {
+        if (LOWORD(wParam) == IDC_SCREENSHOT_DIR_BROWSE && HIWORD(wParam) == BN_CLICKED) {
+            std::wstring picked;
+            if (PickFolder(hwnd, picked)) {
+                SetDlgItemTextW(hwnd, IDC_SCREENSHOT_DIR, picked.c_str());
+            }
+            return TRUE;
+        }
+        break;
     }
     case WM_NOTIFY: {
         auto nmhdr = reinterpret_cast<NMHDR*>(lParam);
         if (nmhdr->code == PSN_APPLY) {
             s_app->GetConfig().startWithWindows = (IsDlgButtonChecked(hwnd, IDC_AUTOSTART) == BST_CHECKED);
+            wchar_t buf[MAX_PATH];
+            GetDlgItemTextW(hwnd, IDC_SCREENSHOT_DIR, buf, MAX_PATH);
+            // Trim trailing whitespace/slashes
+            std::wstring w = buf;
+            while (!w.empty() && (w.back() == L' ' || w.back() == L'\t' ||
+                                  w.back() == L'\\' || w.back() == L'/')) {
+                w.pop_back();
+            }
+            s_app->GetConfig().screenshotDir = WideToUtf8(w);
             s_app->SaveConfig();
+            s_app->ApplyAutostart(); // create/remove the autorun registry entry now
             SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
         }
@@ -129,14 +212,10 @@ INT_PTR CALLBACK SettingsDialog::GeneralProc(HWND hwnd, UINT msg, WPARAM wParam,
 }
 
 // --- Zoom Page ---
-INT_PTR CALLBACK SettingsDialog::ZoomProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+INT_PTR CALLBACK SettingsDialog::ZoomProc(HWND hwnd, UINT msg, WPARAM /*wParam*/, LPARAM lParam) {
     switch (msg) {
     case WM_INITDIALOG: {
         auto& cfg = s_app->GetConfig().zoom;
-        SendDlgItemMessageW(hwnd, IDC_HOTKEY_CTRL, HKM_SETHOTKEY,
-            MAKEWORD(cfg.hotkey.vkey, (cfg.hotkey.modifiers & MOD_SHIFT ? HOTKEYF_SHIFT : 0) |
-                                       (cfg.hotkey.modifiers & MOD_CONTROL ? HOTKEYF_CONTROL : 0) |
-                                       (cfg.hotkey.modifiers & MOD_ALT ? HOTKEYF_ALT : 0)), 0);
         wchar_t buf[16];
         swprintf_s(buf, L"%.1f", cfg.defaultZoomLevel);
         SetDlgItemTextW(hwnd, IDC_ZOOM_LEVEL, buf);
@@ -146,58 +225,11 @@ INT_PTR CALLBACK SettingsDialog::ZoomProc(HWND hwnd, UINT msg, WPARAM wParam, LP
         auto nmhdr = reinterpret_cast<NMHDR*>(lParam);
         if (nmhdr->code == PSN_APPLY) {
             auto& cfg = s_app->GetConfig().zoom;
-            WORD hk = (WORD)SendDlgItemMessageW(hwnd, IDC_HOTKEY_CTRL, HKM_GETHOTKEY, 0, 0);
-            BYTE vk = LOBYTE(hk);
-            BYTE mods = HIBYTE(hk);
-            if (vk) {
-                cfg.hotkey.vkey = vk;
-                cfg.hotkey.modifiers = 0;
-                if (mods & HOTKEYF_CONTROL) cfg.hotkey.modifiers |= MOD_CONTROL;
-                if (mods & HOTKEYF_SHIFT)   cfg.hotkey.modifiers |= MOD_SHIFT;
-                if (mods & HOTKEYF_ALT)     cfg.hotkey.modifiers |= MOD_ALT;
-            }
             wchar_t buf[16];
             GetDlgItemTextW(hwnd, IDC_ZOOM_LEVEL, buf, 16);
             float level = (float)_wtof(buf);
             if (level >= 1.1f && level <= 10.0f) cfg.defaultZoomLevel = level;
             s_app->SaveConfig();
-            s_app->ReregisterHotkeys();
-            SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
-            return TRUE;
-        }
-        break;
-    }
-    }
-    return FALSE;
-}
-
-// --- Draw Page ---
-INT_PTR CALLBACK SettingsDialog::DrawProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-    case WM_INITDIALOG: {
-        auto& cfg = s_app->GetConfig().draw;
-        SendDlgItemMessageW(hwnd, IDC_HOTKEY_CTRL, HKM_SETHOTKEY,
-            MAKEWORD(cfg.hotkey.vkey, (cfg.hotkey.modifiers & MOD_SHIFT ? HOTKEYF_SHIFT : 0) |
-                                       (cfg.hotkey.modifiers & MOD_CONTROL ? HOTKEYF_CONTROL : 0) |
-                                       (cfg.hotkey.modifiers & MOD_ALT ? HOTKEYF_ALT : 0)), 0);
-        return TRUE;
-    }
-    case WM_NOTIFY: {
-        auto nmhdr = reinterpret_cast<NMHDR*>(lParam);
-        if (nmhdr->code == PSN_APPLY) {
-            auto& cfg = s_app->GetConfig().draw;
-            WORD hk = (WORD)SendDlgItemMessageW(hwnd, IDC_HOTKEY_CTRL, HKM_GETHOTKEY, 0, 0);
-            BYTE vk = LOBYTE(hk);
-            BYTE mods = HIBYTE(hk);
-            if (vk) {
-                cfg.hotkey.vkey = vk;
-                cfg.hotkey.modifiers = 0;
-                if (mods & HOTKEYF_CONTROL) cfg.hotkey.modifiers |= MOD_CONTROL;
-                if (mods & HOTKEYF_SHIFT)   cfg.hotkey.modifiers |= MOD_SHIFT;
-                if (mods & HOTKEYF_ALT)     cfg.hotkey.modifiers |= MOD_ALT;
-            }
-            s_app->SaveConfig();
-            s_app->ReregisterHotkeys();
             SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
         }
@@ -208,14 +240,10 @@ INT_PTR CALLBACK SettingsDialog::DrawProc(HWND hwnd, UINT msg, WPARAM wParam, LP
 }
 
 // --- Timer Page ---
-INT_PTR CALLBACK SettingsDialog::TimerProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+INT_PTR CALLBACK SettingsDialog::TimerProc(HWND hwnd, UINT msg, WPARAM /*wParam*/, LPARAM lParam) {
     switch (msg) {
     case WM_INITDIALOG: {
         auto& cfg = s_app->GetConfig().timer;
-        SendDlgItemMessageW(hwnd, IDC_HOTKEY_CTRL, HKM_SETHOTKEY,
-            MAKEWORD(cfg.hotkey.vkey, (cfg.hotkey.modifiers & MOD_SHIFT ? HOTKEYF_SHIFT : 0) |
-                                       (cfg.hotkey.modifiers & MOD_CONTROL ? HOTKEYF_CONTROL : 0) |
-                                       (cfg.hotkey.modifiers & MOD_ALT ? HOTKEYF_ALT : 0)), 0);
         SetDlgItemInt(hwnd, IDC_TIMER_MINUTES, cfg.durationSeconds / 60, FALSE);
         return TRUE;
     }
@@ -223,20 +251,9 @@ INT_PTR CALLBACK SettingsDialog::TimerProc(HWND hwnd, UINT msg, WPARAM wParam, L
         auto nmhdr = reinterpret_cast<NMHDR*>(lParam);
         if (nmhdr->code == PSN_APPLY) {
             auto& cfg = s_app->GetConfig().timer;
-            WORD hk = (WORD)SendDlgItemMessageW(hwnd, IDC_HOTKEY_CTRL, HKM_GETHOTKEY, 0, 0);
-            BYTE vk = LOBYTE(hk);
-            BYTE mods = HIBYTE(hk);
-            if (vk) {
-                cfg.hotkey.vkey = vk;
-                cfg.hotkey.modifiers = 0;
-                if (mods & HOTKEYF_CONTROL) cfg.hotkey.modifiers |= MOD_CONTROL;
-                if (mods & HOTKEYF_SHIFT)   cfg.hotkey.modifiers |= MOD_SHIFT;
-                if (mods & HOTKEYF_ALT)     cfg.hotkey.modifiers |= MOD_ALT;
-            }
             int mins = GetDlgItemInt(hwnd, IDC_TIMER_MINUTES, nullptr, FALSE);
             if (mins >= 1 && mins <= 999) cfg.durationSeconds = mins * 60;
             s_app->SaveConfig();
-            s_app->ReregisterHotkeys();
             SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
             return TRUE;
         }
@@ -246,41 +263,9 @@ INT_PTR CALLBACK SettingsDialog::TimerProc(HWND hwnd, UINT msg, WPARAM wParam, L
     return FALSE;
 }
 
-// --- Snip Page ---
-INT_PTR CALLBACK SettingsDialog::SnipProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-    case WM_INITDIALOG: {
-        auto& cfg = s_app->GetConfig().snip;
-        SendDlgItemMessageW(hwnd, IDC_HOTKEY_CTRL, HKM_SETHOTKEY,
-            MAKEWORD(cfg.hotkey.vkey, (cfg.hotkey.modifiers & MOD_SHIFT ? HOTKEYF_SHIFT : 0) |
-                                       (cfg.hotkey.modifiers & MOD_CONTROL ? HOTKEYF_CONTROL : 0) |
-                                       (cfg.hotkey.modifiers & MOD_ALT ? HOTKEYF_ALT : 0)), 0);
-        return TRUE;
-    }
-    case WM_NOTIFY: {
-        auto nmhdr = reinterpret_cast<NMHDR*>(lParam);
-        if (nmhdr->code == PSN_APPLY) {
-            auto& cfg = s_app->GetConfig().snip;
-            WORD hk = (WORD)SendDlgItemMessageW(hwnd, IDC_HOTKEY_CTRL, HKM_GETHOTKEY, 0, 0);
-            BYTE vk = LOBYTE(hk);
-            BYTE mods = HIBYTE(hk);
-            if (vk) {
-                cfg.hotkey.vkey = vk;
-                cfg.hotkey.modifiers = 0;
-                if (mods & HOTKEYF_CONTROL) cfg.hotkey.modifiers |= MOD_CONTROL;
-                if (mods & HOTKEYF_SHIFT)   cfg.hotkey.modifiers |= MOD_SHIFT;
-                if (mods & HOTKEYF_ALT)     cfg.hotkey.modifiers |= MOD_ALT;
-            }
-            s_app->SaveConfig();
-            s_app->ReregisterHotkeys();
-            SetWindowLongPtr(hwnd, DWLP_MSGRESULT, PSNRET_NOERROR);
-            return TRUE;
-        }
-        break;
-    }
-    }
-    return FALSE;
-}
+// DrawProc and SnipProc retained for re-enable later — see SettingsDialog.h.
+INT_PTR CALLBACK SettingsDialog::DrawProc(HWND, UINT, WPARAM, LPARAM) { return FALSE; }
+INT_PTR CALLBACK SettingsDialog::SnipProc(HWND, UINT, WPARAM, LPARAM) { return FALSE; }
 
 void SettingsDialog::Show(App* app, HINSTANCE hInstance, int initialTab) {
     s_app = app;
@@ -288,38 +273,26 @@ void SettingsDialog::Show(App* app, HINSTANCE hInstance, int initialTab) {
     // Build dialog templates in memory
     // General page
     DialogTemplate genDlg;
-    genDlg.Create(L"General", 220, 120);
-    genDlg.AddCheckbox(L"Start with Windows", IDC_AUTOSTART, 10, 15, 180, 14);
+    genDlg.Create(L"General", 260, 120);
+    genDlg.AddCheckbox(L"Start with Windows", IDC_AUTOSTART, 10, 12, 200, 14);
+    genDlg.AddStatic(L"Screenshot folder:", IDC_LABEL1, 10, 38, 90, 10);
+    genDlg.AddStatic(L"(leave blank for default)", IDC_LABEL2, 105, 38, 145, 10);
+    genDlg.AddEdit(IDC_SCREENSHOT_DIR, 10, 52, 185, 14);
+    genDlg.AddButton(L"Browse...", IDC_SCREENSHOT_DIR_BROWSE, 200, 51, 50, 16);
 
     // Zoom page
     DialogTemplate zoomDlg;
     zoomDlg.Create(L"Zoom", 220, 120);
-    zoomDlg.AddStatic(L"Hotkey:", IDC_LABEL1, 10, 17, 50, 12);
-    zoomDlg.AddHotkey(IDC_HOTKEY_CTRL, 65, 14, 130, 14);
-    zoomDlg.AddStatic(L"Default zoom level:", IDC_LABEL2, 10, 40, 80, 12);
-    zoomDlg.AddEdit(IDC_ZOOM_LEVEL, 100, 38, 40, 14);
-
-    // Draw page — just hotkey (colors/widths configured via right-click menu in overlay)
-    DialogTemplate drawDlg;
-    drawDlg.Create(L"Draw", 220, 120);
-    drawDlg.AddStatic(L"Hotkey:", IDC_LABEL1, 10, 17, 50, 12);
-    drawDlg.AddHotkey(IDC_HOTKEY_CTRL, 65, 14, 130, 14);
+    zoomDlg.AddStatic(L"Default zoom level:", IDC_LABEL2, 10, 17, 80, 12);
+    zoomDlg.AddEdit(IDC_ZOOM_LEVEL, 100, 15, 40, 14);
 
     // Timer page
     DialogTemplate timerDlg;
     timerDlg.Create(L"Timer", 220, 120);
-    timerDlg.AddStatic(L"Hotkey:", IDC_LABEL1, 10, 17, 50, 12);
-    timerDlg.AddHotkey(IDC_HOTKEY_CTRL, 65, 14, 130, 14);
-    timerDlg.AddStatic(L"Duration (minutes):", IDC_LABEL2, 10, 40, 80, 12);
-    timerDlg.AddEdit(IDC_TIMER_MINUTES, 100, 38, 40, 14, ES_NUMBER);
+    timerDlg.AddStatic(L"Duration (minutes):", IDC_LABEL2, 10, 17, 80, 12);
+    timerDlg.AddEdit(IDC_TIMER_MINUTES, 100, 15, 40, 14, ES_NUMBER);
 
-    // Snip page
-    DialogTemplate snipDlg;
-    snipDlg.Create(L"Snip", 220, 120);
-    snipDlg.AddStatic(L"Hotkey:", IDC_LABEL1, 10, 17, 50, 12);
-    snipDlg.AddHotkey(IDC_HOTKEY_CTRL, 65, 14, 130, 14);
-
-    PROPSHEETPAGEW pages[5] = {};
+    PROPSHEETPAGEW pages[3] = {};
 
     pages[0].dwSize = sizeof(PROPSHEETPAGEW);
     pages[0].dwFlags = PSP_DLGINDIRECT;
@@ -336,28 +309,16 @@ void SettingsDialog::Show(App* app, HINSTANCE hInstance, int initialTab) {
     pages[2].dwSize = sizeof(PROPSHEETPAGEW);
     pages[2].dwFlags = PSP_DLGINDIRECT;
     pages[2].hInstance = hInstance;
-    pages[2].pResource = drawDlg.Get();
-    pages[2].pfnDlgProc = DrawProc;
-
-    pages[3].dwSize = sizeof(PROPSHEETPAGEW);
-    pages[3].dwFlags = PSP_DLGINDIRECT;
-    pages[3].hInstance = hInstance;
-    pages[3].pResource = timerDlg.Get();
-    pages[3].pfnDlgProc = TimerProc;
-
-    pages[4].dwSize = sizeof(PROPSHEETPAGEW);
-    pages[4].dwFlags = PSP_DLGINDIRECT;
-    pages[4].hInstance = hInstance;
-    pages[4].pResource = snipDlg.Get();
-    pages[4].pfnDlgProc = SnipProc;
+    pages[2].pResource = timerDlg.Get();
+    pages[2].pfnDlgProc = TimerProc;
 
     PROPSHEETHEADERW psh = {};
     psh.dwSize = sizeof(psh);
     psh.dwFlags = PSH_PROPSHEETPAGE | PSH_NOAPPLYNOW;
     psh.hInstance = hInstance;
     psh.pszCaption = L"DexPresenter Settings";
-    psh.nPages = 5;
-    psh.nStartPage = (initialTab >= 0 && initialTab < 5) ? initialTab : 0;
+    psh.nPages = 3;
+    psh.nStartPage = (initialTab >= 0 && initialTab < 3) ? initialTab : 0;
     psh.ppsp = pages;
 
     PropertySheetW(&psh);

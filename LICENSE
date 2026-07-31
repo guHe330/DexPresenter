@@ -1,11 +1,5 @@
-A. GNU GENERAL PUBLIC LICENSE
-B. License of Dexpresenter Icon Set
-C. Privacy Policy
-
----
-
-A. GNU GENERAL PUBLIC LICENSE
-Version 3, 29 June 2007
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
 
 Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
 Everyone is permitted to copy and distribute verbatim copies
@@ -678,17 +672,3 @@ may consider it more useful to permit linking proprietary applications with
 the library. If this is what you want to do, use the GNU Lesser General
 Public License instead of this License. But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
-
-B. License of DexPresenter Icon Set
-
-Note that all images distributed in or with Dexpresenter application are NOT
-published under the GNU General Public License. It means that it is not
-allowed to redistribute or reuse these images or parts of them or modifications of them without Dexpresenter separately or in or with another software.
-
-You agree that all ownership and copyright of the licensed stock icons remain
-the property of Gunter Heiss. Dexpresenter was granted a license to
-display this graphical media royalty-free in Dexpresenter software applications, web design, presentations, and multimedia projects that Dexpresenter creates and/or distributes.
-
-C. DexPresenter Privacy Policy
-
-Please see [PRIVACY.md](PRIVACY.md) for DexPresenter's complete privacy policy.

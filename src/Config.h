@@ -1,5 +1,27 @@
+/**
+ * DexPresenter - a free and open source Windows presentation utility with drawing tools
+ * Copyright (C) 2026 Gunter Heiss
+ *
+ * For more information see: https://dexpresenter.com
+ * The DexPresenter project is hosted on GitHub: https://github.com/guHe330/DexPresenter
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 #include <Windows.h>
+#include <filesystem>
 #include <string>
 #include <map>
 
@@ -20,15 +42,13 @@ struct ShapeStyle {
 
 struct DrawConfig {
     HotkeyConfig hotkey = { MOD_CONTROL, '2' };
-    ShapeStyle freehand = { 255, 0, 0, 3 };
+    ShapeStyle freehand = { 232, 96, 140, 3 };  // Theme pink
     ShapeStyle arrow    = { 232, 96, 140, 3 };  // Theme pink
     ShapeStyle box      = { 0, 200, 0, 3 };
     ShapeStyle circle   = { 0, 0, 255, 3 };
-    ShapeStyle smooth   = { 232, 96, 140, 3 };   // Theme pink
     int lastMode = 0;       // ShapeMode enum value (persisted between sessions)
     int lastColorR = 255, lastColorG = 0, lastColorB = 0;
     int lastWidth = 3;
-    std::string screenshotDir; // empty = default (%USERPROFILE%\Pictures\DexPresenter)
 };
 
 struct TimerConfig {
@@ -38,7 +58,6 @@ struct TimerConfig {
 
 struct SnipConfig {
     HotkeyConfig hotkey = { MOD_CONTROL, '6' };
-    std::string screenshotDir; // empty = default (%USERPROFILE%\Pictures\DexPresenter)
 };
 
 struct ToolbarConfig {
@@ -54,6 +73,7 @@ struct AppConfig {
     SnipConfig snip;
     ToolbarConfig toolbar;
     bool startWithWindows = false;
+    std::string screenshotDir; // empty = default (%USERPROFILE%\Pictures\DexPresenter)
 };
 
 // Utility: format seconds as MM:SS or H:MM:SS
@@ -77,8 +97,10 @@ public:
     void SetFloat(const std::string& section, const std::string& key, float value);
     void SetBool(const std::string& section, const std::string& key, bool value);
 
-    bool LoadFromFile(const std::string& path);
-    bool SaveToFile(const std::string& path) const;
+    // std::filesystem::path keeps the path wide on Windows, so config files in
+    // profiles with non-ANSI characters (e.g. C:\Users\Müller) work correctly.
+    bool LoadFromFile(const std::filesystem::path& path);
+    bool SaveToFile(const std::filesystem::path& path) const;
 
     // For testing: load/save to string
     void LoadFromString(const std::string& content);
@@ -96,7 +118,7 @@ AppConfig AppConfigFromIni(const IniFile& ini);
 class Config {
 public:
     static std::wstring GetConfigDir();
-    static std::string  GetConfigPath();
+    static std::filesystem::path GetConfigPath();
     static AppConfig    Load();
     static void         Save(const AppConfig& config);
 };

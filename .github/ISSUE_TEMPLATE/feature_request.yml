@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an improvement or new capability
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the **problem** you're trying to solve, not just the solution you have in mind. Check [existing requests](../issues?q=is%3Aissue+label%3Aenhancement) first. Note that as a one-person project, not every good idea will be built (see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md)).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      placeholder: During presentations I often need to ...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution (optional)
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds or alternatives you've considered

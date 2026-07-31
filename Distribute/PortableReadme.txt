@@ -8,5 +8,4 @@ Getting Started:
 
 Settings are stored in: %APPDATA%\DexPresenter
 
-For more information, visit:
-  https://github.com/guHe330/DexPresenter
+For more information, visit: https://github.com/guHe330/DexPresenter

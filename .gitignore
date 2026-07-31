@@ -36,16 +36,25 @@
 
 # Build directories
 build/
+build-clang/
 vs2022/
 vs_build/
 
 # Installer build artifacts
 installer/innosetup/output/
 
-# Documentation (except README)
+# Documentation (except project docs).
+# Blanket-ignore keeps internal planning notes out of the repo by default;
+# public-facing docs are opted back in one at a time.
 *.md
 !README.md
 !PRIVACY.md
+!CONTRIBUTING.md
+!SUPPORT.md
+!SECURITY.md
+!CHANGELOG.md
+!Distribute/RELEASE_TEMPLATE.md
+!.github/**/*.md
 
 # Claude Code
 .claude/

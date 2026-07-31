@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/guHe330/DexPresenter/security/advisories/new
+    about: Please report security issues privately via a GitHub security advisory, not a public issue.
+  - name: Questions & support
+    url: https://github.com/guHe330/DexPresenter/blob/main/SUPPORT.md
+    about: How to get help using DexPresenter.

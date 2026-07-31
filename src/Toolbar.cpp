@@ -1,9 +1,53 @@
+/**
+ * DexPresenter - a free and open source Windows presentation utility with drawing tools
+ * Copyright (C) 2026 Gunter Heiss
+ *
+ * For more information see: https://dexpresenter.com
+ * The DexPresenter project is hosted on GitHub: https://github.com/guHe330/DexPresenter
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "Toolbar.h"
 #include "App.h"
 #include "Constants.h"
+#include "../resources/resource.h"
 #include <commctrl.h>
 #include <windowsx.h>
 #include <gdiplus.h>
+
+static Gdiplus::Bitmap* LoadPngResource(HINSTANCE hInst, int resId) {
+    HRSRC hRes = FindResourceW(hInst, MAKEINTRESOURCEW(resId), RT_RCDATA);
+    if (!hRes) return nullptr;
+    HGLOBAL hGlobal = LoadResource(hInst, hRes);
+    if (!hGlobal) return nullptr;
+    DWORD size = SizeofResource(hInst, hRes);
+    void* data = LockResource(hGlobal);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
+    if (!hMem) return nullptr;
+    void* mem = GlobalLock(hMem);
+    memcpy(mem, data, size);
+    GlobalUnlock(hMem);
+    IStream* stream = nullptr;
+    if (FAILED(CreateStreamOnHGlobal(hMem, TRUE, &stream))) {
+        GlobalFree(hMem);
+        return nullptr;
+    }
+    Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(stream);
+    stream->Release();
+    return bmp;
+}
 
 static const wchar_t* TOOLBAR_CLASS = L"DexPresenterToolbar";
 
@@ -45,7 +89,7 @@ Toolbar::Toolbar(App* app, HINSTANCE hInstance) : m_app(app), m_hInstance(hInsta
         x, y, TOOLBAR_WIDTH, TOOLBAR_HEIGHT,
         nullptr, nullptr, hInstance, this);
 
-    SetLayeredWindowAttributes(m_hwnd, 0, 230, LWA_ALPHA);
+    SetLayeredWindowAttributes(m_hwnd, RGB(255, 0, 255), 230, LWA_ALPHA | LWA_COLORKEY);
 
     // Create tooltip control
     m_hwndTooltip = CreateWindowExW(
@@ -69,6 +113,11 @@ Toolbar::Toolbar(App* app, HINSTANCE hInstance) : m_app(app), m_hInstance(hInsta
         SendMessageW(m_hwndTooltip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
     }
 
+    // Load toolbar icons from embedded resources (order: Snip, Draw, Timer, Zoom)
+    static const int iconResIds[] = { IDB_TOOLBAR_SNIP, IDB_TOOLBAR_DRAW, IDB_TOOLBAR_TIMER, IDB_TOOLBAR_ZOOM };
+    for (int i = 0; i < 4; i++)
+        m_icons[i] = LoadPngResource(hInstance, iconResIds[i]);
+
     if (cfg.visible) Show();
 }
 
@@ -76,6 +125,7 @@ Toolbar::~Toolbar() {
     SavePosition();
     if (m_hwndTooltip) DestroyWindow(m_hwndTooltip);
     if (m_hwnd) DestroyWindow(m_hwnd);
+    for (auto* bmp : m_icons) delete bmp;
 }
 
 void Toolbar::Show() {
@@ -116,29 +166,11 @@ int Toolbar::HitTest(int x, int y) {
 }
 
 std::wstring Toolbar::GetButtonTooltip(int index) {
-    auto& cfg = m_app->GetConfig();
-    auto fmtHotkey = [](const HotkeyConfig& hk) -> std::wstring {
-        std::wstring s;
-        if (hk.modifiers & MOD_CONTROL) s += L"Ctrl+";
-        if (hk.modifiers & MOD_ALT)     s += L"Alt+";
-        if (hk.modifiers & MOD_SHIFT)   s += L"Shift+";
-        if (hk.modifiers & MOD_WIN)     s += L"Win+";
-        if (hk.vkey >= '0' && hk.vkey <= '9')
-            s += (wchar_t)hk.vkey;
-        else if (hk.vkey >= 'A' && hk.vkey <= 'Z')
-            s += (wchar_t)hk.vkey;
-        else {
-            wchar_t buf[16];
-            swprintf_s(buf, L"0x%02X", hk.vkey);
-            s += buf;
-        }
-        return s;
-    };
     switch (index) {
-    case 0: return L"Snip (" + fmtHotkey(cfg.snip.hotkey) + L")";
-    case 1: return L"Draw (" + fmtHotkey(cfg.draw.hotkey) + L")";
-    case 2: return L"Timer (" + fmtHotkey(cfg.timer.hotkey) + L")";
-    case 3: return L"Zoom (" + fmtHotkey(cfg.zoom.hotkey) + L")";
+    case 0: return L"Snip";
+    case 1: return L"Draw";
+    case 2: return L"Timer";
+    case 3: return L"Zoom";
     case 4: return L"Minimize to tray";
     default: return L"";
     }
@@ -167,13 +199,19 @@ void Toolbar::Paint(HDC hdc) {
     Gdiplus::Pen borderPen(Theme::Border(100), 1.0f);
     graphics.DrawPath(&borderPen, &path);
 
-    // Button labels
-    const wchar_t* labels[] = { L"S", L"D", L"T", L"Z", L"\x00D7" };
-
-    Gdiplus::Font font(L"Segoe UI", 14.0f, Gdiplus::FontStyleBold);
+    Gdiplus::Font closeFont(L"Segoe UI", 14.0f, Gdiplus::FontStyleBold);
     Gdiplus::StringFormat fmt;
     fmt.SetAlignment(Gdiplus::StringAlignmentCenter);
     fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+
+    // Drag grip: vertical bar inset on the right side
+    {
+        float gripX = (float)(rc.right - TOOLBAR_GRIP_AREA / 2 - TOOLBAR_GRIP_WIDTH / 2);
+        float gripY = (float)(TOOLBAR_PADDING + 4);
+        float gripH = (float)(TOOLBAR_BUTTON_SIZE - 8);
+        Gdiplus::SolidBrush gripBrush(Theme::Border());
+        graphics.FillRectangle(&gripBrush, gripX, gripY, (float)TOOLBAR_GRIP_WIDTH, gripH);
+    }
 
     for (int i = 0; i < NUM_BUTTONS; i++) {
         int bx = TOOLBAR_PADDING + i * (TOOLBAR_BUTTON_SIZE + TOOLBAR_PADDING);
@@ -194,18 +232,21 @@ void Toolbar::Paint(HDC hdc) {
             graphics.FillPath(&hoverBrush, &hoverPath);
         }
 
-        // Text color: close=danger, others=accent when hovered, text when not
-        Gdiplus::Color textColor;
-        if (i == 4) {
-            textColor = (i == m_hoverIndex) ? Theme::Danger() : Gdiplus::Color(255, Theme::DN_R, Theme::DN_G, Theme::DN_B);
-        } else if (i == m_hoverIndex) {
-            textColor = Theme::Accent();
+        if (i < 4 && m_icons[i]) {
+            // Draw PNG icon centered in button, scaled to ICON_RENDER_W x ICON_RENDER_H
+            float ix = btnRect.X + (btnRect.Width  - ICON_RENDER_W) / 2.0f;
+            float iy = btnRect.Y + (btnRect.Height - ICON_RENDER_H) / 2.0f;
+            graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            graphics.DrawImage(m_icons[i],
+                Gdiplus::RectF(ix, iy, (float)ICON_RENDER_W, (float)ICON_RENDER_H));
         } else {
-            textColor = Theme::Text();
+            // Close button — draw × text
+            Gdiplus::Color textColor = (i == m_hoverIndex)
+                ? Theme::Danger()
+                : Gdiplus::Color(255, Theme::DN_R, Theme::DN_G, Theme::DN_B);
+            Gdiplus::SolidBrush textBrush(textColor);
+            graphics.DrawString(L"\x00D7", -1, &closeFont, btnRect, &fmt, &textBrush);
         }
-        Gdiplus::SolidBrush textBrush(textColor);
-
-        graphics.DrawString(labels[i], -1, &font, btnRect, &fmt, &textBrush);
     }
 }
 
@@ -231,8 +272,10 @@ LRESULT CALLBACK Toolbar::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         HDC hdcMem = CreateCompatibleDC(hdc);
         HBITMAP hBuf = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
         HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBuf);
-        // Clear to black (transparent via layered window)
-        FillRect(hdcMem, &rc, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        // Clear to magenta — keyed out by LWA_COLORKEY for true transparency outside the rounded background
+        HBRUSH hKeyBrush = CreateSolidBrush(RGB(255, 0, 255));
+        FillRect(hdcMem, &rc, hKeyBrush);
+        DeleteObject(hKeyBrush);
         self->Paint(hdcMem);
         BitBlt(hdc, 0, 0, rc.right, rc.bottom, hdcMem, 0, 0, SRCCOPY);
         SelectObject(hdcMem, hOld);

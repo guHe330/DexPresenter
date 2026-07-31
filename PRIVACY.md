@@ -9,7 +9,7 @@ DexPresenter respects your privacy completely. **We do not collect, store, or tr
 DexPresenter stores **only** the following locally on your computer:
 
 - **Installation**: `Program Files\DexPresenter\` — The executable and built-in UI resources
-- **Configuration**: `%AppData%\DexPresenter\config.ini` — Hotkey bindings, zoom levels, timer duration, and tool preferences
+- **Configuration**: `%AppData%\DexPresenter\config.ini` — Zoom level, timer duration, and tool preferences
 - **Screenshots**: `%USERPROFILE%\Pictures\DexPresenter\` (or your custom directory) — Images you capture or annotate
 - **Registry** (Windows autorun only): If you enable "Start with Windows", a single registry entry is created at `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run\DexPresenter` pointing to the executable
 

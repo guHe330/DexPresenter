@@ -1,0 +1,14 @@
+# Matches the existing style in src/ — attached braces, 4-space indent,
+# left-aligned pointers, case labels at switch level.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 110
+PointerAlignment: Left
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+IndentCaseLabels: false
+AccessModifierOffset: -4
+SortIncludes: false
+AlignConsecutiveAssignments: false
+BreakBeforeBraces: Attach

@@ -12,13 +12,17 @@
     Build the Inno Setup installer after successful build
 .PARAMETER Clean
     Remove the build directory before building
+.PARAMETER Clang
+    Build with clang-cl instead of MSVC (output goes to build-clang\).
+    Requires the "C++ Clang tools for Windows" VS component or an LLVM install.
 #>
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Config = "Release",
     [switch]$SkipTests,
     [switch]$BuildInstaller,
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$Clang
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,7 +44,10 @@ if (-not $vsPath) {
 Write-Host "Using Visual Studio at: $vsPath" -ForegroundColor Cyan
 
 # --- Clean ---
-$buildDir = Join-Path $scriptDir "build"
+# clang-cl builds go to a separate directory so the two toolchains never
+# share a CMake cache (and build\ stays the canonical dir for the installer).
+$buildDirName = if ($Clang) { "build-clang" } else { "build" }
+$buildDir = Join-Path $scriptDir $buildDirName
 if ($Clean -and (Test-Path $buildDir)) {
     Write-Host "Cleaning build directory..." -ForegroundColor Yellow
     Remove-Item -Recurse -Force $buildDir
@@ -70,8 +77,37 @@ if (-not $cmake) {
 }
 Write-Host "Using CMake: $cmake" -ForegroundColor Cyan
 
-# --- Use NMake Makefiles (reliable with MSVC generator expressions) ---
-$generator = "NMake Makefiles"
+# --- Pick a generator: Ninja (fast, parallel) if available, else NMake ---
+$ninja = Get-Command ninja -ErrorAction SilentlyContinue
+if (-not $ninja) {
+    # VS bundles Ninja with its CMake tools component
+    $vsNinja = Join-Path $vsPath "Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
+    if (Test-Path $vsNinja) {
+        $env:PATH = "$(Split-Path $vsNinja);$env:PATH"
+        $ninja = $vsNinja
+    }
+}
+$generator = if ($ninja) { "Ninja" } else { "NMake Makefiles" }
+
+# --- clang-cl toolchain (optional) ---
+$compilerArgs = @()
+if ($Clang) {
+    $clangCl = Get-Command clang-cl -ErrorAction SilentlyContinue
+    if (-not $clangCl) {
+        $vsClang = Join-Path $vsPath "VC\Tools\Llvm\x64\bin\clang-cl.exe"
+        if (Test-Path $vsClang) {
+            $env:PATH = "$(Split-Path $vsClang);$env:PATH"
+            $clangCl = $vsClang
+        }
+    }
+    if (-not $clangCl) {
+        Write-Error ("clang-cl not found. Install the 'C++ Clang tools for Windows' component " +
+            "via the Visual Studio Installer, or LLVM from https://llvm.org and add it to PATH.")
+        exit 1
+    }
+    Write-Host "Using clang-cl: $clangCl" -ForegroundColor Cyan
+    $compilerArgs = @("-DCMAKE_C_COMPILER=clang-cl", "-DCMAKE_CXX_COMPILER=clang-cl")
+}
 
 # --- Set up MSVC environment ---
 $vcvarsall = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
@@ -94,8 +130,8 @@ if (-not (Test-Path $buildDir)) {
     New-Item -ItemType Directory -Path $buildDir | Out-Null
 }
 
-Write-Host "`n=== Configuring ($generator, $Config) ===" -ForegroundColor Green
-& $cmake -G $generator -DCMAKE_BUILD_TYPE=$Config -S . -B build
+Write-Host "`n=== Configuring ($generator, $Config$(if ($Clang) { ', clang-cl' })) ===" -ForegroundColor Green
+& $cmake -G $generator "-DCMAKE_BUILD_TYPE=$Config" @compilerArgs -S . -B $buildDirName
 if ($LASTEXITCODE -ne 0) {
     Write-Error "CMake configure failed."
     exit 1
@@ -103,7 +139,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # --- Build ---
 Write-Host "`n=== Building ===" -ForegroundColor Green
-& $cmake --build build --config $Config
+& $cmake --build $buildDirName --config $Config
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed."
     exit 1
@@ -114,7 +150,7 @@ Write-Host "`nBuild successful!" -ForegroundColor Green
 # --- Tests ---
 if (-not $SkipTests) {
     Write-Host "`n=== Running Tests ===" -ForegroundColor Green
-    & $cmake --build build --target DexPresenterTests --config $Config 2>$null
+    & $cmake --build $buildDirName --target DexPresenterTests --config $Config 2>$null
     $testExe = Join-Path $buildDir "DexPresenterTests.exe"
     if (Test-Path $testExe) {
         & $testExe --gtest_color=yes
@@ -144,6 +180,7 @@ $archiveItems = @(
     "resources",
     "installer",
     "CMakeLists.txt",
+    "CMakePresets.json",
     "README.md",
     "LICENSE",
     "PRIVACY.md",
@@ -185,6 +222,10 @@ if (Test-Path $tempZipList) {
 }
 
 # --- Installer ---
+if ($BuildInstaller -and $Clang) {
+    Write-Warning "The installer is built from the MSVC output in build\; skipping installer for a clang build."
+    $BuildInstaller = $false
+}
 if ($BuildInstaller) {
     Write-Host "`n=== Building Installer ===" -ForegroundColor Green
     $iscc = Get-Command iscc -ErrorAction SilentlyContinue

@@ -1,3 +1,24 @@
+/**
+ * DexPresenter - a free and open source Windows presentation utility with drawing tools
+ * Copyright (C) 2026 Gunter Heiss
+ *
+ * For more information see: https://dexpresenter.com
+ * The DexPresenter project is hosted on GitHub: https://github.com/guHe330/DexPresenter
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <gtest/gtest.h>
 #include "Config.h"
 
@@ -8,14 +29,13 @@ TEST(AppConfig, DefaultValues) {
     EXPECT_FLOAT_EQ(c.zoom.defaultZoomLevel, 2.0f);
     EXPECT_EQ(c.draw.hotkey.vkey, '2');
     EXPECT_EQ(c.draw.freehand.width, 3);
-    EXPECT_EQ(c.draw.freehand.colorR, 255);
-    EXPECT_EQ(c.draw.freehand.colorG, 0);
-    EXPECT_EQ(c.draw.freehand.colorB, 0);
+    EXPECT_EQ(c.draw.freehand.colorR, 232);
+    EXPECT_EQ(c.draw.freehand.colorG, 96);
+    EXPECT_EQ(c.draw.freehand.colorB, 140);
     EXPECT_EQ(c.timer.hotkey.vkey, '3');
     EXPECT_EQ(c.timer.durationSeconds, 600);
     EXPECT_EQ(c.snip.hotkey.vkey, '6');
-    EXPECT_TRUE(c.draw.screenshotDir.empty());
-    EXPECT_TRUE(c.snip.screenshotDir.empty());
+    EXPECT_TRUE(c.screenshotDir.empty());
     EXPECT_FALSE(c.startWithWindows);
     EXPECT_TRUE(c.toolbar.visible);
     EXPECT_EQ(c.toolbar.posX, -1);
@@ -29,8 +49,7 @@ TEST(AppConfig, IniRoundTrip) {
     orig.draw.freehand.colorG = 255;
     orig.draw.freehand.colorB = 128;
     orig.timer.durationSeconds = 300;
-    orig.draw.screenshotDir = "C:\\Screenshots";
-    orig.snip.screenshotDir = "D:\\Snips";
+    orig.screenshotDir = "C:\\Screenshots";
     orig.startWithWindows = true;
     orig.toolbar.posX = 100;
     orig.toolbar.posY = 200;
@@ -46,8 +65,7 @@ TEST(AppConfig, IniRoundTrip) {
     EXPECT_EQ(back.draw.freehand.colorG, 255);
     EXPECT_EQ(back.draw.freehand.colorB, 128);
     EXPECT_EQ(back.timer.durationSeconds, 300);
-    EXPECT_EQ(back.draw.screenshotDir, "C:\\Screenshots");
-    EXPECT_EQ(back.snip.screenshotDir, "D:\\Snips");
+    EXPECT_EQ(back.screenshotDir, "C:\\Screenshots");
     EXPECT_TRUE(back.startWithWindows);
     EXPECT_EQ(back.toolbar.posX, 100);
     EXPECT_EQ(back.toolbar.posY, 200);
@@ -108,6 +126,31 @@ TEST(AppConfig, PartialIniGetDefaults) {
     EXPECT_EQ(c.draw.freehand.width, 3);
     EXPECT_EQ(c.timer.durationSeconds, 600);
     EXPECT_TRUE(c.toolbar.visible);
+}
+
+TEST(AppConfig, ScreenshotDirMigratesFromDrawSection) {
+    // Older configs stored the path under [draw] / [snip]. Loading one of those
+    // should populate the new top-level screenshotDir.
+    IniFile ini;
+    ini.LoadFromString("[draw]\nscreenshotDir = C:\\Old\\Draw\n");
+    AppConfig c = AppConfigFromIni(ini);
+    EXPECT_EQ(c.screenshotDir, "C:\\Old\\Draw");
+}
+
+TEST(AppConfig, ScreenshotDirMigratesFromSnipSection) {
+    IniFile ini;
+    ini.LoadFromString("[snip]\nscreenshotDir = D:\\Old\\Snip\n");
+    AppConfig c = AppConfigFromIni(ini);
+    EXPECT_EQ(c.screenshotDir, "D:\\Old\\Snip");
+}
+
+TEST(AppConfig, ScreenshotDirGeneralTakesPrecedenceOverLegacy) {
+    IniFile ini;
+    ini.LoadFromString(
+        "[general]\nscreenshotDir = E:\\New\n"
+        "[draw]\nscreenshotDir = C:\\Old\\Draw\n");
+    AppConfig c = AppConfigFromIni(ini);
+    EXPECT_EQ(c.screenshotDir, "E:\\New");
 }
 
 TEST(AppConfig, UnknownKeysIgnored) {

@@ -1,3 +1,24 @@
+/**
+ * DexPresenter - a free and open source Windows presentation utility with drawing tools
+ * Copyright (C) 2026 Gunter Heiss
+ *
+ * For more information see: https://dexpresenter.com
+ * The DexPresenter project is hosted on GitHub: https://github.com/guHe330/DexPresenter
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "Config.h"
 #include <ShlObj.h>
 #include <fstream>
@@ -126,7 +147,7 @@ std::string IniFile::SaveToString() const {
     return out.str();
 }
 
-bool IniFile::LoadFromFile(const std::string& path) {
+bool IniFile::LoadFromFile(const std::filesystem::path& path) {
     std::ifstream file(path);
     if (!file.is_open()) return false;
     std::string content((std::istreambuf_iterator<char>(file)),
@@ -135,7 +156,7 @@ bool IniFile::LoadFromFile(const std::string& path) {
     return true;
 }
 
-bool IniFile::SaveToFile(const std::string& path) const {
+bool IniFile::SaveToFile(const std::filesystem::path& path) const {
     std::ofstream file(path);
     if (!file.is_open()) return false;
     file << SaveToString();
@@ -177,13 +198,11 @@ void AppConfigToIni(const AppConfig& config, IniFile& ini) {
     saveStyle("arrow", config.draw.arrow);
     saveStyle("box", config.draw.box);
     saveStyle("circle", config.draw.circle);
-    saveStyle("smooth", config.draw.smooth);
     ini.SetInt("draw", "lastMode", config.draw.lastMode);
     ini.SetInt("draw", "lastColorR", config.draw.lastColorR);
     ini.SetInt("draw", "lastColorG", config.draw.lastColorG);
     ini.SetInt("draw", "lastColorB", config.draw.lastColorB);
     ini.SetInt("draw", "lastWidth", config.draw.lastWidth);
-    ini.Set("draw", "screenshotDir", config.draw.screenshotDir);
 
     // Timer
     HotkeyToIni(ini, "timer", "hotkey", config.timer.hotkey);
@@ -191,7 +210,6 @@ void AppConfigToIni(const AppConfig& config, IniFile& ini) {
 
     // Snip
     HotkeyToIni(ini, "snip", "hotkey", config.snip.hotkey);
-    ini.Set("snip", "screenshotDir", config.snip.screenshotDir);
 
     // Toolbar
     ini.SetInt("toolbar", "posX", config.toolbar.posX);
@@ -200,6 +218,7 @@ void AppConfigToIni(const AppConfig& config, IniFile& ini) {
 
     // General
     ini.SetBool("general", "startWithWindows", config.startWithWindows);
+    ini.Set("general", "screenshotDir", config.screenshotDir);
 }
 
 AppConfig AppConfigFromIni(const IniFile& ini) {
@@ -221,13 +240,11 @@ AppConfig AppConfigFromIni(const IniFile& ini) {
     loadStyle("arrow", config.draw.arrow);
     loadStyle("box", config.draw.box);
     loadStyle("circle", config.draw.circle);
-    loadStyle("smooth", config.draw.smooth);
     config.draw.lastMode = ini.GetInt("draw", "lastMode", config.draw.lastMode);
     config.draw.lastColorR = ini.GetInt("draw", "lastColorR", config.draw.lastColorR);
     config.draw.lastColorG = ini.GetInt("draw", "lastColorG", config.draw.lastColorG);
     config.draw.lastColorB = ini.GetInt("draw", "lastColorB", config.draw.lastColorB);
     config.draw.lastWidth = ini.GetInt("draw", "lastWidth", config.draw.lastWidth);
-    config.draw.screenshotDir = ini.Get("draw", "screenshotDir", config.draw.screenshotDir);
 
     // Timer
     config.timer.hotkey = HotkeyFromIni(ini, "timer", "hotkey", config.timer.hotkey);
@@ -235,7 +252,6 @@ AppConfig AppConfigFromIni(const IniFile& ini) {
 
     // Snip
     config.snip.hotkey = HotkeyFromIni(ini, "snip", "hotkey", config.snip.hotkey);
-    config.snip.screenshotDir = ini.Get("snip", "screenshotDir", config.snip.screenshotDir);
 
     // Toolbar
     config.toolbar.posX = ini.GetInt("toolbar", "posX", config.toolbar.posX);
@@ -244,6 +260,14 @@ AppConfig AppConfigFromIni(const IniFile& ini) {
 
     // General
     config.startWithWindows = ini.GetBool("general", "startWithWindows", config.startWithWindows);
+    config.screenshotDir = ini.Get("general", "screenshotDir", "");
+    // Migrate older configs that stored the path under [draw] or [snip]
+    if (config.screenshotDir.empty()) {
+        config.screenshotDir = ini.Get("draw", "screenshotDir", "");
+        if (config.screenshotDir.empty()) {
+            config.screenshotDir = ini.Get("snip", "screenshotDir", "");
+        }
+    }
 
     return config;
 }
@@ -262,10 +286,8 @@ std::wstring Config::GetConfigDir() {
     return L".";
 }
 
-std::string Config::GetConfigPath() {
-    std::wstring wdir = GetConfigDir();
-    std::wstring wpath = wdir + L"\\config.ini";
-    return WideToUtf8(wpath);
+std::filesystem::path Config::GetConfigPath() {
+    return std::filesystem::path(GetConfigDir()) / L"config.ini";
 }
 
 AppConfig Config::Load() {

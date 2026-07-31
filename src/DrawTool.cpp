@@ -1,5 +1,27 @@
+/**
+ * DexPresenter - a free and open source Windows presentation utility with drawing tools
+ * Copyright (C) 2026 Gunter Heiss
+ *
+ * For more information see: https://dexpresenter.com
+ * The DexPresenter project is hosted on GitHub: https://github.com/guHe330/DexPresenter
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "DrawTool.h"
 #include "SaveUtils.h"
+#include "SaveToast.h"
 #include "Constants.h"
 #include <algorithm>
 #include <cmath>
@@ -21,13 +43,12 @@ static constexpr int NUM_PALETTE_COLORS = 8;
 static const int g_widthPresets[] = { 1, 3, 6, 10 };
 static constexpr int NUM_WIDTH_PRESETS = 4;
 
-// Shape mode labels (Smooth, Obfuscate, and Eraser added; Eraser has no shortcut key shown)
-static const wchar_t* g_shapeLabels[] = { L"Freehand", L"Smooth", L"Arrow", L"Box", L"Circle", L"Obfuscate", L"Eraser" };
-static const wchar_t* g_shapeKeys[]   = { L"F",        L"S",      L"A",    L"B",  L"C",     L"V",          L"X" };
-static constexpr int NUM_DRAW_MODES = 7;  // total shape modes incl. obfuscate and eraser
+// Shape mode labels
+static const wchar_t* g_shapeLabels[] = { L"Freehand", L"Arrow", L"Box", L"Circle", L"Obfuscate", L"Eraser" };
+static constexpr int NUM_DRAW_MODES = 6;
 
 // Menu structure:
-// Items 0..6:   shape modes (Freehand, Smooth, Arrow, Box, Circle, Obfuscate, Eraser)
+// Items 0..5:   shape modes (Freehand, Arrow, Box, Circle, Obfuscate, Eraser)
 // separator
 // colors        (2 rows x 4 cols of swatches)
 // separator
@@ -45,7 +66,6 @@ const ShapeStyle& DrawTool::GetCurrentStyle() const {
     case ShapeMode::Arrow:    return m_config.arrow;
     case ShapeMode::Box:      return m_config.box;
     case ShapeMode::Circle:   return m_config.circle;
-    case ShapeMode::Smooth:   return m_config.smooth;
     case ShapeMode::Obfuscate: return m_config.freehand; // uses freehand style
     case ShapeMode::Eraser:   return m_config.freehand; // eraser doesn't draw
     }
@@ -58,7 +78,6 @@ ShapeStyle& DrawTool::GetMutableStyle() {
     case ShapeMode::Arrow:    return m_config.arrow;
     case ShapeMode::Box:      return m_config.box;
     case ShapeMode::Circle:   return m_config.circle;
-    case ShapeMode::Smooth:   return m_config.smooth;
     case ShapeMode::Obfuscate: return m_config.freehand;
     case ShapeMode::Eraser:   return m_config.freehand;
     }
@@ -105,10 +124,24 @@ void DrawTool::OnActivated() {
     m_redoStack.clear();
     m_drawing = false;
     m_menuVisible = false;
+    m_hintElapsedMs = 0;
+    m_hintVisible = true;
+    SetTimer(GetHwnd(), HINT_TIMER_ID, HINT_TICK_MS, nullptr);
     SetCursor(LoadCursor(nullptr, IDC_CROSS));
 }
 
+void DrawTool::OnTimer(UINT_PTR id) {
+    if (id != HINT_TIMER_ID) return;
+    m_hintElapsedMs += HINT_TICK_MS;
+    if (m_hintElapsedMs >= HINT_VISIBLE_MS + HINT_FADE_MS) {
+        m_hintVisible = false;
+        KillTimer(GetHwnd(), HINT_TIMER_ID);
+    }
+    Invalidate();
+}
+
 void DrawTool::OnDismissed() {
+    if (GetHwnd()) KillTimer(GetHwnd(), HINT_TIMER_ID);
     // Save current tool's style and last-used state for next session
     SaveCurrentStyle();
     m_config.lastMode = (int)m_shapeMode;
@@ -146,16 +179,72 @@ void DrawTool::OnPaint(HDC hdc, int width, int height) {
     if (m_menuVisible) {
         PaintContextMenu(hdc);
     }
+
+    // Hint overlay (visible 2s then fades, hidden while menu is open)
+    if (m_hintVisible && !m_menuVisible) {
+        int alpha = 255;
+        if (m_hintElapsedMs >= HINT_VISIBLE_MS) {
+            int fadeProgress = m_hintElapsedMs - HINT_VISIBLE_MS;
+            alpha = 255 - (255 * fadeProgress / HINT_FADE_MS);
+            if (alpha < 0) alpha = 0;
+        }
+
+        const wchar_t* hintText = L"Right-click: drawing menu  \u2502  Esc: finish & save";
+        int hintFontSize = height / 40 > 12 ? height / 40 : 12;
+        HFONT hHintFont = CreateFontW(
+            -hintFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+
+        HDC hdcTmp = CreateCompatibleDC(hdc);
+        HFONT hOldTmp = (HFONT)SelectObject(hdcTmp, hHintFont);
+        SIZE textSize = {};
+        GetTextExtentPoint32W(hdcTmp, hintText, (int)wcslen(hintText), &textSize);
+        SelectObject(hdcTmp, hOldTmp);
+        DeleteDC(hdcTmp);
+
+        int pad = hintFontSize / 2;
+        int boxW = textSize.cx + pad * 4;
+        int boxH = textSize.cy + pad * 2;
+        int boxX = (width - boxW) / 2;
+        int boxY = height - boxH - height / 20;
+
+        HDC hdcHint = CreateCompatibleDC(hdc);
+        HBITMAP hHintBmp = CreateCompatibleBitmap(hdc, boxW, boxH);
+        HBITMAP hOldHintBmp = (HBITMAP)SelectObject(hdcHint, hHintBmp);
+
+        RECT boxRect = { 0, 0, boxW, boxH };
+        HBRUSH hBoxBrush = CreateSolidBrush(RGB(30, 30, 30));
+        FillRect(hdcHint, &boxRect, hBoxBrush);
+        DeleteObject(hBoxBrush);
+
+        HFONT hOldHintFont = (HFONT)SelectObject(hdcHint, hHintFont);
+        SetTextColor(hdcHint, RGB(220, 220, 220));
+        SetBkMode(hdcHint, TRANSPARENT);
+        DrawTextW(hdcHint, hintText, -1, &boxRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(hdcHint, hOldHintFont);
+
+        BLENDFUNCTION bf = {};
+        bf.BlendOp = AC_SRC_OVER;
+        bf.SourceConstantAlpha = (BYTE)alpha;
+        bf.AlphaFormat = 0;
+        AlphaBlend(hdc, boxX, boxY, boxW, boxH, hdcHint, 0, 0, boxW, boxH, bf);
+
+        SelectObject(hdcHint, hOldHintBmp);
+        DeleteObject(hHintBmp);
+        DeleteDC(hdcHint);
+        DeleteObject(hHintFont);
+    }
 }
 
 void DrawTool::DrawAllElements(Gdiplus::Graphics& graphics) {
     for (auto& elem : m_elements)
-        DrawElement(graphics, elem);
+        DrawElement(graphics, elem, true);   // committed: use cache
     if (m_drawing)
-        DrawElement(graphics, m_currentElement);
+        DrawElement(graphics, m_currentElement, false);  // in-progress: no cache
 }
 
-void DrawTool::DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& elem) {
+void DrawTool::DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& elem, bool useCache) {
     Gdiplus::Color color(255, GetRValue(elem.color), GetGValue(elem.color), GetBValue(elem.color));
     Gdiplus::Pen pen(color, (float)elem.width);
     pen.SetStartCap(Gdiplus::LineCapRound);
@@ -163,15 +252,9 @@ void DrawTool::DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& ele
     pen.SetLineJoin(Gdiplus::LineJoinRound);
 
     switch (elem.type) {
-    case ShapeMode::Freehand: {
-        if (elem.points.size() < 2) return;
-        std::vector<Gdiplus::Point> pts;
-        pts.reserve(elem.points.size());
-        for (auto& p : elem.points)
-            pts.push_back(Gdiplus::Point(p.x, p.y));
-        graphics.DrawLines(&pen, pts.data(), (int)pts.size());
+    case ShapeMode::Freehand:
+        DrawSmoothCurve(graphics, elem);
         break;
-    }
     case ShapeMode::Arrow:
         DrawArrowShape(graphics, elem.startPt, elem.endPt, elem.color, elem.width);
         break;
@@ -193,9 +276,6 @@ void DrawTool::DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& ele
             graphics.DrawEllipse(&pen, x, y, w, h);
         break;
     }
-    case ShapeMode::Smooth:
-        DrawSmoothCurve(graphics, elem);
-        break;
     case ShapeMode::Obfuscate: {
         int left = (std::min)(elem.startPt.x, elem.endPt.x);
         int top = (std::min)(elem.startPt.y, elem.endPt.y);
@@ -203,41 +283,112 @@ void DrawTool::DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& ele
         int bottom = (std::max)(elem.startPt.y, elem.endPt.y);
         if (right - left < 2 || bottom - top < 2) break;
 
-        HDC hdcSrc = CreateCompatibleDC(nullptr);
-        HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
-
         int bx0 = left / OBFUSCATE_PIXEL_SIZE;
         int bx1 = right / OBFUSCATE_PIXEL_SIZE;
         int by0 = top / OBFUSCATE_PIXEL_SIZE;
         int by1 = bottom / OBFUSCATE_PIXEL_SIZE;
+        int px_left = bx0 * OBFUSCATE_PIXEL_SIZE;
+        int py_top  = by0 * OBFUSCATE_PIXEL_SIZE;
+        int cache_w = (bx1 - bx0 + 1) * OBFUSCATE_PIXEL_SIZE;
+        int cache_h = (by1 - by0 + 1) * OBFUSCATE_PIXEL_SIZE;
+
+        // Use cached bitmap if available, otherwise compute it
+        if (useCache && elem.hObfuscateCache) {
+            HDC hdc = graphics.GetHDC();
+            HDC hdcCache = CreateCompatibleDC(hdc);
+            HBITMAP hOld = (HBITMAP)SelectObject(hdcCache, elem.hObfuscateCache);
+            BitBlt(hdc, px_left, py_top, cache_w, cache_h, hdcCache, 0, 0, SRCCOPY);
+            SelectObject(hdcCache, hOld);
+            DeleteDC(hdcCache);
+            graphics.ReleaseHDC(hdc);
+            break;
+        }
+
+        // Read entire source bitmap in one call (much faster than GetPixel per pixel)
+        BITMAP bm;
+        GetObject(m_hScreen, sizeof(bm), &bm);
+        int sw = bm.bmWidth, sh = bm.bmHeight;
+
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth       = sw;
+        bmi.bmiHeader.biHeight      = -sh;  // top-down
+        bmi.bmiHeader.biPlanes      = 1;
+        bmi.bmiHeader.biBitCount    = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        std::vector<BYTE> srcPixels(sw * sh * 4);
+        {
+            HDC hdcSrc = CreateCompatibleDC(nullptr);
+            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
+            GetDIBits(hdcSrc, m_hScreen, 0, sh, srcPixels.data(), &bmi, DIB_RGB_COLORS);
+            SelectObject(hdcSrc, hOldBmp);
+            DeleteDC(hdcSrc);
+        }
+
+        // Build the obfuscated image into a DIB section (all in-memory, no GDI per-pixel)
+        BITMAPINFO bmiCache = {};
+        bmiCache.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+        bmiCache.bmiHeader.biWidth       = cache_w;
+        bmiCache.bmiHeader.biHeight      = -cache_h;
+        bmiCache.bmiHeader.biPlanes      = 1;
+        bmiCache.bmiHeader.biBitCount    = 32;
+        bmiCache.bmiHeader.biCompression = BI_RGB;
+
+        void* pBits = nullptr;
+        HBITMAP hNewCache = CreateDIBSection(nullptr, &bmiCache, DIB_RGB_COLORS, &pBits, nullptr, 0);
+        if (!hNewCache) break;
+        BYTE* dst = (BYTE*)pBits;
 
         for (int bx = bx0; bx <= bx1; bx++) {
             for (int by = by0; by <= by1; by++) {
                 int px0 = bx * OBFUSCATE_PIXEL_SIZE;
                 int py0 = by * OBFUSCATE_PIXEL_SIZE;
-                // Average all pixels in this block
-                long sumR = 0, sumG = 0, sumB = 0;
-                int count = 0;
-                for (int py = py0; py < py0 + OBFUSCATE_PIXEL_SIZE; py++) {
-                    for (int px = px0; px < px0 + OBFUSCATE_PIXEL_SIZE; px++) {
-                        COLORREF c = GetPixel(hdcSrc, px, py);
-                        sumR += GetRValue(c);
-                        sumG += GetGValue(c);
-                        sumB += GetBValue(c);
+                // Average all pixels in this block from the source buffer
+                long sumR = 0, sumG = 0, sumB = 0, count = 0;
+                for (int py = py0; py < py0 + OBFUSCATE_PIXEL_SIZE && py < sh; py++) {
+                    for (int px = px0; px < px0 + OBFUSCATE_PIXEL_SIZE && px < sw; px++) {
+                        int idx = (py * sw + px) * 4;
+                        sumB += srcPixels[idx + 0];
+                        sumG += srcPixels[idx + 1];
+                        sumR += srcPixels[idx + 2];
                         count++;
                     }
                 }
+                if (!count) continue;
                 BYTE avgR = (BYTE)(sumR / count);
                 BYTE avgG = (BYTE)(sumG / count);
                 BYTE avgB = (BYTE)(sumB / count);
-                Gdiplus::SolidBrush brush(Gdiplus::Color(255, avgR, avgG, avgB));
-                graphics.FillRectangle(&brush, px0, py0,
-                    OBFUSCATE_PIXEL_SIZE, OBFUSCATE_PIXEL_SIZE);
+                // Fill block into cache DIB
+                int dstX0 = px0 - px_left;
+                int dstY0 = py0 - py_top;
+                for (int cy = 0; cy < OBFUSCATE_PIXEL_SIZE && (py0 + cy) < sh; cy++) {
+                    int row = (dstY0 + cy) * cache_w;
+                    for (int cx = 0; cx < OBFUSCATE_PIXEL_SIZE && (px0 + cx) < sw; cx++) {
+                        int di = (row + dstX0 + cx) * 4;
+                        dst[di + 0] = avgB;
+                        dst[di + 1] = avgG;
+                        dst[di + 2] = avgR;
+                        dst[di + 3] = 255;
+                    }
+                }
             }
         }
 
-        SelectObject(hdcSrc, hOldBmp);
-        DeleteDC(hdcSrc);
+        // Blit the result to the output
+        HDC hdc = graphics.GetHDC();
+        HDC hdcCache = CreateCompatibleDC(hdc);
+        HBITMAP hOld = (HBITMAP)SelectObject(hdcCache, hNewCache);
+        BitBlt(hdc, px_left, py_top, cache_w, cache_h, hdcCache, 0, 0, SRCCOPY);
+        SelectObject(hdcCache, hOld);
+        DeleteDC(hdcCache);
+        graphics.ReleaseHDC(hdc);
+
+        // Store for future frames
+        if (useCache)
+            elem.hObfuscateCache = hNewCache;
+        else
+            DeleteObject(hNewCache);
         break;
     }
     case ShapeMode::Eraser:
@@ -279,45 +430,6 @@ void DrawTool::DrawArrowShape(Gdiplus::Graphics& graphics, POINT start, POINT en
     Gdiplus::PointF arrowPts[] = { tip, left, right };
     Gdiplus::SolidBrush brush(gColor);
     graphics.FillPolygon(&brush, arrowPts, 3);
-}
-
-// Ramer-Douglas-Peucker point simplification
-static float PerpendicularDist(POINT p, POINT a, POINT b) {
-    float dx = (float)(b.x - a.x), dy = (float)(b.y - a.y);
-    float len = sqrtf(dx * dx + dy * dy);
-    if (len < 0.001f) {
-        float ex = (float)(p.x - a.x), ey = (float)(p.y - a.y);
-        return sqrtf(ex * ex + ey * ey);
-    }
-    return fabsf(dy * (float)(p.x - a.x) - dx * (float)(p.y - a.y)) / len;
-}
-
-static void RDPSimplify(const std::vector<POINT>& pts, int start, int end,
-                         float epsilon, std::vector<bool>& keep) {
-    if (end - start < 2) return;
-    float maxDist = 0;
-    int maxIdx = start;
-    for (int i = start + 1; i < end; i++) {
-        float d = PerpendicularDist(pts[i], pts[start], pts[end]);
-        if (d > maxDist) { maxDist = d; maxIdx = i; }
-    }
-    if (maxDist > epsilon) {
-        keep[maxIdx] = true;
-        RDPSimplify(pts, start, maxIdx, epsilon, keep);
-        RDPSimplify(pts, maxIdx, end, epsilon, keep);
-    }
-}
-
-static std::vector<POINT> SimplifyPoints(const std::vector<POINT>& pts, float epsilon) {
-    if (pts.size() < 3) return pts;
-    std::vector<bool> keep(pts.size(), false);
-    keep.front() = true;
-    keep.back() = true;
-    RDPSimplify(pts, 0, (int)pts.size() - 1, epsilon, keep);
-    std::vector<POINT> result;
-    for (size_t i = 0; i < pts.size(); i++)
-        if (keep[i]) result.push_back(pts[i]);
-    return result;
 }
 
 void DrawTool::DrawSmoothCurve(Gdiplus::Graphics& graphics, const ::DrawElement& elem) {
@@ -375,7 +487,6 @@ int DrawTool::EraserHitTest(int x, int y) const {
         const auto& elem = m_elements[i];
         switch (elem.type) {
         case ShapeMode::Freehand:
-        case ShapeMode::Smooth:
             for (auto& p : elem.points) {
                 int dx = p.x - x, dy = p.y - y;
                 if (dx * dx + dy * dy < (HIT_DIST + elem.width) * (HIT_DIST + elem.width))
@@ -561,10 +672,6 @@ void DrawTool::PaintContextMenu(HDC hdc) {
         Gdiplus::RectF labelRect(textX, curY, mw - textX + mx - MENU_PADDING, (float)MENU_ITEM_HEIGHT);
         graphics.DrawString(g_shapeLabels[i], -1, isCurrent ? &fontBold : &font, labelRect, &fmtLeft, &textBrush);
 
-        Gdiplus::SolidBrush keyBrush(Theme::TextSecondary());
-        Gdiplus::RectF keyRect(mx, curY, mw - MENU_PADDING, (float)MENU_ITEM_HEIGHT);
-        graphics.DrawString(g_shapeKeys[i], -1, &fontSmall, keyRect, &fmtRight, &keyBrush);
-
         curY += MENU_ITEM_HEIGHT;
     }
 
@@ -658,7 +765,7 @@ void DrawTool::PaintContextMenu(HDC hdc) {
     ActionItem actions[] = {
         { L"\u21B6", L"Undo",      L"Ctrl+Z", 300, !m_undoStack.empty() },
         { L"\u21B7", L"Redo",      L"Ctrl+Y", 302, !m_redoStack.empty() },
-        { nullptr,   L"Clear All", L"E",      301, !m_elements.empty() },
+        { nullptr,   L"Clear All", L"",  301, !m_elements.empty() },
     };
     for (auto& act : actions) {
         bool isHover = (m_menuHover == act.id);
@@ -777,82 +884,73 @@ int DrawTool::ContextMenuHitTest(int x, int y) {
 }
 
 // ==========================================================================
+// Undo / Redo
+// ==========================================================================
+
+void DrawTool::Undo() {
+    if (m_undoStack.empty()) return;
+    auto action = std::move(m_undoStack.back());
+    m_undoStack.pop_back();
+    if (action.type == UndoAction::Draw) {
+        if (!m_elements.empty()) {
+            UndoAction redoAction;
+            redoAction.type = UndoAction::Draw;
+            redoAction.erasedElement = std::move(m_elements.back());
+            m_redoStack.push_back(std::move(redoAction));
+            m_elements.pop_back();
+        }
+    } else {
+        int idx = std::clamp(action.erasedIndex, 0, (int)m_elements.size());
+        UndoAction redoAction;
+        redoAction.type = UndoAction::Erase;
+        redoAction.erasedIndex = idx;
+        m_redoStack.push_back(std::move(redoAction));
+        m_elements.insert(m_elements.begin() + idx, std::move(action.erasedElement));
+    }
+    Invalidate();
+}
+
+void DrawTool::Redo() {
+    if (m_redoStack.empty()) return;
+    auto action = std::move(m_redoStack.back());
+    m_redoStack.pop_back();
+    if (action.type == UndoAction::Draw) {
+        m_elements.push_back(std::move(action.erasedElement));
+        m_undoStack.push_back({ UndoAction::Draw });
+    } else {
+        int idx = std::clamp(action.erasedIndex, 0, (int)m_elements.size() - 1);
+        UndoAction undoAction;
+        undoAction.type = UndoAction::Erase;
+        undoAction.erasedIndex = idx;
+        undoAction.erasedElement = std::move(m_elements[idx]);
+        m_undoStack.push_back(std::move(undoAction));
+        m_elements.erase(m_elements.begin() + idx);
+    }
+    Invalidate();
+}
+
+void DrawTool::ClearAll() {
+    m_elements.clear();
+    m_undoStack.clear();
+    m_redoStack.clear();
+    Invalidate();
+}
+
+// ==========================================================================
 // Input handling
 // ==========================================================================
 
 void DrawTool::OnKeyDown(WPARAM vkey) {
-    switch (vkey) {
-    case 'F': SaveCurrentStyle(); m_shapeMode = ShapeMode::Freehand; ApplyCurrentStyle(); CloseContextMenu(); Invalidate(); return;
-    case 'A': SaveCurrentStyle(); m_shapeMode = ShapeMode::Arrow;    ApplyCurrentStyle(); CloseContextMenu(); Invalidate(); return;
-    case 'B': SaveCurrentStyle(); m_shapeMode = ShapeMode::Box;      ApplyCurrentStyle(); CloseContextMenu(); Invalidate(); return;
-    case 'C': SaveCurrentStyle(); m_shapeMode = ShapeMode::Circle;   ApplyCurrentStyle(); CloseContextMenu(); Invalidate(); return;
-    case 'S': SaveCurrentStyle(); m_shapeMode = ShapeMode::Smooth;   ApplyCurrentStyle(); CloseContextMenu(); Invalidate(); return;
-    case 'V': SaveCurrentStyle(); m_shapeMode = ShapeMode::Obfuscate; ApplyCurrentStyle(); CloseContextMenu(); Invalidate(); return;
-    case 'X': SaveCurrentStyle(); m_shapeMode = ShapeMode::Eraser;   ApplyCurrentStyle(); CloseContextMenu(); Invalidate(); return;
-    }
-
-    // Ctrl+key combos first (before plain key shortcuts)
     bool ctrlHeld = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     if (ctrlHeld && vkey == 'Z') {
-        if (!m_undoStack.empty()) {
-            auto action = std::move(m_undoStack.back());
-            m_undoStack.pop_back();
-            if (action.type == UndoAction::Draw) {
-                if (!m_elements.empty()) {
-                    UndoAction redoAction;
-                    redoAction.type = UndoAction::Draw;
-                    redoAction.erasedElement = std::move(m_elements.back());
-                    m_redoStack.push_back(std::move(redoAction));
-                    m_elements.pop_back();
-                }
-            } else {
-                int idx = std::clamp(action.erasedIndex, 0, (int)m_elements.size());
-                UndoAction redoAction;
-                redoAction.type = UndoAction::Erase;
-                redoAction.erasedIndex = idx;
-                m_redoStack.push_back(std::move(redoAction));
-                m_elements.insert(m_elements.begin() + idx, std::move(action.erasedElement));
-            }
-            Invalidate();
-        }
+        Undo();
         return;
     }
     if (ctrlHeld && vkey == 'Y') {
-        if (!m_redoStack.empty()) {
-            auto action = std::move(m_redoStack.back());
-            m_redoStack.pop_back();
-            if (action.type == UndoAction::Draw) {
-                m_elements.push_back(std::move(action.erasedElement));
-                m_undoStack.push_back({ UndoAction::Draw });
-            } else {
-                int idx = std::clamp(action.erasedIndex, 0, (int)m_elements.size() - 1);
-                UndoAction undoAction;
-                undoAction.type = UndoAction::Erase;
-                undoAction.erasedIndex = idx;
-                undoAction.erasedElement = std::move(m_elements[idx]);
-                m_undoStack.push_back(std::move(undoAction));
-                m_elements.erase(m_elements.begin() + idx);
-            }
-            Invalidate();
-        }
+        Redo();
         return;
     }
 
-    switch (vkey) {
-    case 'R': m_penColor = RGB(255, 0, 0);     break;
-    case 'G': m_penColor = RGB(0, 200, 0);     break;
-    case 'Y': m_penColor = RGB(255, 255, 0);   break;
-    case 'O': m_penColor = RGB(255, 165, 0);   break;
-    case 'P': m_penColor = RGB(232, 96, 140);  break;
-    case 'W': m_penColor = RGB(255, 255, 255); break;
-    case 'K': m_penColor = RGB(0, 0, 0);       break;
-    case 'E':
-        m_elements.clear();
-        m_undoStack.clear();
-        m_redoStack.clear();
-        Invalidate();
-        break;
-    }
 }
 
 void DrawTool::OnMouseMove(int x, int y) {
@@ -882,7 +980,7 @@ void DrawTool::OnMouseMove(int x, int y) {
     }
 
     if (m_drawing) {
-        if (m_shapeMode == ShapeMode::Smooth) {
+        if (m_shapeMode == ShapeMode::Freehand) {
             // Exponential smoothing: blend raw input toward running average
             m_smoothX = SMOOTH_ALPHA * (float)x + (1.0f - SMOOTH_ALPHA) * m_smoothX;
             m_smoothY = SMOOTH_ALPHA * (float)y + (1.0f - SMOOTH_ALPHA) * m_smoothY;
@@ -897,8 +995,6 @@ void DrawTool::OnMouseMove(int x, int y) {
             } else {
                 m_currentElement.points.push_back({ (int)m_smoothX, (int)m_smoothY });
             }
-        } else if (m_shapeMode == ShapeMode::Freehand) {
-            m_currentElement.points.push_back({ x, y });
         } else {
             POINT end = { x, y };
             if (GetKeyState(VK_SHIFT) & 0x8000) {
@@ -914,11 +1010,15 @@ void DrawTool::OnMouseMove(int x, int y) {
     }
 }
 
-void DrawTool::OnMouseWheel(int delta, bool ctrlHeld) {
+void DrawTool::OnMouseWheel(int /*delta*/, bool /*ctrlHeld*/) {
     // Mouse wheel disabled for DrawTool
 }
 
 void DrawTool::OnLButtonDown(int x, int y) {
+    if (m_hintVisible) {
+        m_hintVisible = false;
+        KillTimer(GetHwnd(), HINT_TIMER_ID);
+    }
     // Handle context menu clicks
     if (m_menuVisible) {
         int hit = ContextMenuHitTest(x, y);
@@ -939,52 +1039,13 @@ void DrawTool::OnLButtonDown(int x, int y) {
             Invalidate();
             return;
         } else if (hit == 300) { // Undo
-            if (!m_undoStack.empty()) {
-                auto action = std::move(m_undoStack.back());
-                m_undoStack.pop_back();
-                if (action.type == UndoAction::Draw) {
-                    if (!m_elements.empty()) {
-                        UndoAction redoAction;
-                        redoAction.type = UndoAction::Draw;
-                        redoAction.erasedElement = std::move(m_elements.back());
-                        m_redoStack.push_back(std::move(redoAction));
-                        m_elements.pop_back();
-                    }
-                } else {
-                    int idx = std::clamp(action.erasedIndex, 0, (int)m_elements.size());
-                    UndoAction redoAction;
-                    redoAction.type = UndoAction::Erase;
-                    redoAction.erasedIndex = idx;
-                    m_redoStack.push_back(std::move(redoAction));
-                    m_elements.insert(m_elements.begin() + idx, std::move(action.erasedElement));
-                }
-                Invalidate();
-            }
+            Undo();
             return;
         } else if (hit == 302) { // Redo
-            if (!m_redoStack.empty()) {
-                auto action = std::move(m_redoStack.back());
-                m_redoStack.pop_back();
-                if (action.type == UndoAction::Draw) {
-                    m_elements.push_back(std::move(action.erasedElement));
-                    m_undoStack.push_back({ UndoAction::Draw });
-                } else {
-                    int idx = std::clamp(action.erasedIndex, 0, (int)m_elements.size() - 1);
-                    UndoAction undoAction;
-                    undoAction.type = UndoAction::Erase;
-                    undoAction.erasedIndex = idx;
-                    undoAction.erasedElement = std::move(m_elements[idx]);
-                    m_undoStack.push_back(std::move(undoAction));
-                    m_elements.erase(m_elements.begin() + idx);
-                }
-                Invalidate();
-            }
+            Redo();
             return;
         } else if (hit == 301) { // Clear All
-            m_elements.clear();
-            m_undoStack.clear();
-            m_redoStack.clear();
-            Invalidate();
+            ClearAll();
             return;
         }
         // Clicked outside menu — close it and fall through to start drawing
@@ -1017,8 +1078,6 @@ void DrawTool::OnLButtonDown(int x, int y) {
     m_currentElement.startPt = { x, y };
     m_currentElement.endPt = { x, y };
     if (m_shapeMode == ShapeMode::Freehand) {
-        m_currentElement.points.push_back({ x, y });
-    } else if (m_shapeMode == ShapeMode::Smooth) {
         m_smoothX = (float)x;
         m_smoothY = (float)y;
         m_currentElement.points.push_back({ x, y });
@@ -1033,13 +1092,11 @@ void DrawTool::OnLButtonUp(int x, int y) {
         return;
     }
     if (m_drawing) {
-        if (m_shapeMode == ShapeMode::Smooth) {
+        if (m_shapeMode == ShapeMode::Freehand) {
             // Add final smoothed endpoint
             m_smoothX = SMOOTH_ALPHA * (float)x + (1.0f - SMOOTH_ALPHA) * m_smoothX;
             m_smoothY = SMOOTH_ALPHA * (float)y + (1.0f - SMOOTH_ALPHA) * m_smoothY;
             m_currentElement.points.push_back({ (int)m_smoothX, (int)m_smoothY });
-        } else if (m_shapeMode == ShapeMode::Freehand) {
-            m_currentElement.points.push_back({ x, y });
         } else {
             m_currentElement.endPt = { x, y };
         }
@@ -1054,6 +1111,10 @@ void DrawTool::OnLButtonUp(int x, int y) {
 }
 
 void DrawTool::OnRButtonDown(int x, int y) {
+    if (m_hintVisible) {
+        m_hintVisible = false;
+        KillTimer(GetHwnd(), HINT_TIMER_ID);
+    }
     if (m_menuVisible) {
         CloseContextMenu();
     } else {
@@ -1102,8 +1163,8 @@ void DrawTool::SaveScreenshot() {
     if (!hComposite) return;
 
     std::wstring dir;
-    if (!m_config.screenshotDir.empty()) {
-        dir = Utf8ToWide(m_config.screenshotDir);
+    if (!m_screenshotDir.empty()) {
+        dir = Utf8ToWide(m_screenshotDir);
     } else {
         dir = GetDefaultScreenshotDir();
     }
@@ -1111,4 +1172,5 @@ void DrawTool::SaveScreenshot() {
     std::wstring path = GenerateScreenshotPath(dir, L"DexPresenter_Draw");
     SaveBitmapAsPng(hComposite, path);
     DeleteObject(hComposite);
+    ShowSaveToast(path);
 }
