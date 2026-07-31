@@ -11,7 +11,22 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    # windows-2022 (VS 2022) is the toolchain of record: it matches local dev
+    # and the release build. windows-latest (VS 2026 since the 2026-07 image
+    # roll) runs alongside it as advance warning only and must never block a
+    # merge -- promote it to the pinned image once it has been green a while.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: windows-2022
+            blocking: true
+          - image: windows-latest
+            blocking: false
+
+    name: build-and-test (${{ matrix.image }})
+    runs-on: ${{ matrix.image }}
+    continue-on-error: ${{ !matrix.blocking }}
 
     steps:
     - name: Checkout repository
@@ -20,8 +35,11 @@ jobs:
     - name: Setup CMake
       uses: lukka/get-cmake@latest
 
+    # No -G: let CMake pick the newest Visual Studio on the runner, so the same
+    # step works on both images. Pinning "Visual Studio 17 2022" broke configure
+    # outright the moment windows-latest rolled to VS 2026.
     - name: Configure CMake
-      run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      run: cmake -S . -B build -A x64
 
     - name: Build Release
       run: cmake --build build --config Release
@@ -32,7 +50,9 @@ jobs:
         & "build/Release/DexPresenterTests.exe"
         if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
 
+    # Only the pinned leg publishes; both legs would collide on artifact name.
     - name: Upload executable
+      if: matrix.blocking
       uses: actions/upload-artifact@v4
       with:
         name: DexPresenter-${{ github.sha }}

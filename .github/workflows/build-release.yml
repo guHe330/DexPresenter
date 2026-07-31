@@ -9,7 +9,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # Pinned deliberately, NOT windows-latest: release binaries are built with
+    # the same VS 2022 toolchain used locally, so static-CRT codegen and the
+    # sub-500 KB exe budget stay predictable. Move this only on purpose, after
+    # the advisory windows-latest leg in ci.yml has been green.
+    runs-on: windows-2022
 
     steps:
     - name: Checkout repository
@@ -78,8 +82,10 @@ jobs:
         Set-Content $rcFile -Value $content
         Write-Host "Updated $rcFile to $dotVer"
 
+    # No -G: let CMake pick the VS on the runner, so pinning the toolchain is
+    # done in one place (runs-on above) rather than two.
     - name: Configure CMake
-      run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      run: cmake -S . -B build -A x64
 
     - name: Build Release
       run: cmake --build build --config Release
