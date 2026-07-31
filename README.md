@@ -35,6 +35,8 @@ It is inspired by [ZoomIt](https://learn.microsoft.com/en-us/windows/powertoys/z
 
 ## Features
 
+<!-- TODO screenshot: toolbar docked at top edge of screen, showing the Snip/Draw/Timer/Zoom icon buttons and close button -->
+
 ### Tools
 
 | Tool  | Description                                                                                                        |
@@ -43,6 +45,10 @@ It is inspired by [ZoomIt](https://learn.microsoft.com/en-us/windows/powertoys/z
 | Draw  | Capture screen, draw annotations. Right-click for tool/color/width panel. Auto-saves annotated screenshot on exit. |
 | Timer | Full-screen countdown timer (default 10 minutes). ESC to dismiss.                                                  |
 | Zoom  | Capture screen, overlay zoomed view. Mouse to pan, scroll to zoom, ESC to exit.                                    |
+
+<!-- TODO gif: zoom tool — activating zoom, panning around, scrolling to change zoom level -->
+<!-- TODO screenshot: timer tool — full-screen countdown overlay -->
+<!-- TODO gif: snip tool — dragging a rectangle selection, showing the saved result -->
 
 ### Drawing Tools
 
@@ -55,13 +61,16 @@ It is inspired by [ZoomIt](https://learn.microsoft.com/en-us/windows/powertoys/z
 - **Undo**: Ctrl+Z to undo last action (drawing or erasing)
 - **Redo**: Ctrl+Y to redo last undone action
 - **Obfuscate**: Drag to pixelate screen regions, hides sensitive information
+<!-- TODO gif: obfuscate in action — dragging over an email address or password to pixelate it -->
 - **Eraser**: Drag to erase elements, fully undoable
 - **Clear All**: accessible via right-click panel
 - **Shift-Constrain**: Hold Shift for perfect squares (Box) or circles (Circle)
 
+<!-- TODO screenshot: right-click panel showing shape modes, color palette, and width presets -->
+
 ### User Interface
 
-- **Always-On-Top Toolbar**: Compact floating toolbar with tool buttons (S, D, T, Z) and close button
+- **Always-On-Top Toolbar**: Compact floating toolbar with Snip/Draw/Timer/Zoom icon buttons and a close button
 - **Dark Theme**: Dark grey + pink color scheme with anti-aliased GDI+ rendering
 - **Tray Integration**: System tray icon with right-click menu (Show Toolbar, Settings, Exit)
 - **Draggable Toolbar**: Click and drag the toolbar to reposition; position is persisted
