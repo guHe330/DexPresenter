@@ -33,7 +33,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Setup CMake
-      uses: lukka/get-cmake@latest
+      uses: lukka/get-cmake@v4.4.0
 
     # No -G: let CMake pick the newest Visual Studio on the runner, so the same
     # step works on both images. Pinning "Visual Studio 17 2022" broke configure
@@ -68,7 +68,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Setup CMake
-      uses: lukka/get-cmake@latest
+      uses: lukka/get-cmake@v4.4.0
 
     - name: Setup MSVC environment (headers/libs for clang-cl)
       uses: ilammy/msvc-dev-cmd@v1

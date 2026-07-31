@@ -24,8 +24,11 @@ jobs:
     - name: Setup MSVC
       uses: microsoft/setup-msbuild@v2
 
+    # Pinned, not @latest: an unpinned CMake can raise its minimum-supported
+    # cmake_minimum_required out from under us with no warning, exactly how the
+    # VS 2026 image roll broke configure. CMakeLists.txt asks for 3.21.
     - name: Setup CMake
-      uses: lukka/get-cmake@latest
+      uses: lukka/get-cmake@v4.4.0
 
     - name: Get version from tag
       id: get_version
@@ -178,7 +181,7 @@ jobs:
         Set-Content "release_notes.md" -Value $body
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: ${{ steps.get_version.outputs.tag }}
         name: DexPresenter ${{ steps.get_version.outputs.tag }}
