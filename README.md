@@ -73,7 +73,7 @@ It is inspired by [ZoomIt](https://learn.microsoft.com/en-us/windows/powertoys/z
 - **Always-On-Top Toolbar**: Compact floating toolbar with Snip/Draw/Timer/Zoom icon buttons and a close button
 - **Dark Theme**: Dark grey + pink color scheme with anti-aliased GDI+ rendering
 - **Tray Integration**: System tray icon with right-click menu (Show Toolbar, Settings, Exit)
-- **Draggable Toolbar**: Click and drag the toolbar to reposition; position is persisted
+- **Draggable Toolbar**: Click and drag the grip to reposition; the toolbar always stays fully on screen, snaps flush against the taskbar (drag further to float over it), moves freely between monitors, and remembers where you put it on each one. Position is persisted
 - **Settings Dialog**: Tabbed PropertySheet for configuring zoom level and timer duration
 
 <!-- TODO screenshot: settings dialog showing the zoom/timer tabs -->
@@ -129,9 +129,14 @@ lastMode = 0
 durationSeconds = 600
 
 [toolbar]
-posX = -1
-posY = 0
 visible = 1
+monitor = \\.\DISPLAY1
+
+; Where the toolbar was last placed on each monitor, as "x,y" measured from that
+; monitor's top-left corner. Written automatically as you drag it around.
+[toolbar.monitors]
+\\.\DISPLAY1 = 1512,1032
+\\.\DISPLAY2 = 40,8
 
 [general]
 startWithWindows = 0

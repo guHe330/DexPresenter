@@ -41,6 +41,13 @@ private:
     void Paint(HDC hdc);
     int HitTest(int x, int y);
     std::wstring GetButtonTooltip(int index);
+    void RecordPlacement();
+    void OnDisplayChange();
+    // Where the toolbar belongs given the monitors attached right now: on
+    // preferredDevice if that is still one of them, otherwise on the primary.
+    // False if the monitor could not be queried at all.
+    bool ResolvePlacement(const std::wstring& preferredDevice, POINT& outPos,
+                          std::wstring& outDevice) const;
 
     App* m_app;
     HINSTANCE m_hInstance;
@@ -48,6 +55,10 @@ private:
     HWND m_hwndTooltip = nullptr;
     int m_hoverIndex = -1;
     bool m_classRegistered = false;
+
+    // Display device name of the monitor the toolbar is on right now. The placements
+    // themselves live in ToolbarConfig so they persist across restarts.
+    std::wstring m_currentDevice;
 
     static constexpr int NUM_BUTTONS = 5; // Snip, Draw, Timer, Zoom, Close
 

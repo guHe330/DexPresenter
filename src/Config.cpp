@@ -95,6 +95,15 @@ bool IniFile::GetBool(const std::string& section, const std::string& key, bool d
     return val == "1" || val == "true" || val == "yes";
 }
 
+std::vector<std::string> IniFile::GetKeys(const std::string& section) const {
+    std::vector<std::string> keys;
+    auto sit = m_data.find(section);
+    if (sit == m_data.end()) return keys;
+    keys.reserve(sit->second.size());
+    for (const auto& [key, val] : sit->second) keys.push_back(key);
+    return keys;
+}
+
 void IniFile::SetInt(const std::string& section, const std::string& key, int value) {
     Set(section, key, std::to_string(value));
 }
@@ -212,9 +221,15 @@ void AppConfigToIni(const AppConfig& config, IniFile& ini) {
     HotkeyToIni(ini, "snip", "hotkey", config.snip.hotkey);
 
     // Toolbar
-    ini.SetInt("toolbar", "posX", config.toolbar.posX);
-    ini.SetInt("toolbar", "posY", config.toolbar.posY);
     ini.SetBool("toolbar", "visible", config.toolbar.visible);
+    ini.Set("toolbar", "monitor", config.toolbar.monitor);
+
+    // One "<device name> = x,y" line per monitor the toolbar has been placed on
+    for (const auto& [device, offset] : config.toolbar.placements) {
+        if (device.empty()) continue;
+        ini.Set("toolbar.monitors", device,
+                std::to_string(offset.x) + "," + std::to_string(offset.y));
+    }
 
     // General
     ini.SetBool("general", "startWithWindows", config.startWithWindows);
@@ -254,9 +269,20 @@ AppConfig AppConfigFromIni(const IniFile& ini) {
     config.snip.hotkey = HotkeyFromIni(ini, "snip", "hotkey", config.snip.hotkey);
 
     // Toolbar
-    config.toolbar.posX = ini.GetInt("toolbar", "posX", config.toolbar.posX);
-    config.toolbar.posY = ini.GetInt("toolbar", "posY", config.toolbar.posY);
     config.toolbar.visible = ini.GetBool("toolbar", "visible", config.toolbar.visible);
+    config.toolbar.monitor = ini.Get("toolbar", "monitor", "");
+
+    for (const auto& device : ini.GetKeys("toolbar.monitors")) {
+        std::string value = ini.Get("toolbar.monitors", device);
+        auto comma = value.find(',');
+        if (comma == std::string::npos) continue;
+        try {
+            POINT offset{ std::stol(value.substr(0, comma)), std::stol(value.substr(comma + 1)) };
+            config.toolbar.placements[device] = offset;
+        } catch (...) {
+            // Hand-edited or truncated line — skip it rather than lose the rest
+        }
+    }
 
     // General
     config.startWithWindows = ini.GetBool("general", "startWithWindows", config.startWithWindows);

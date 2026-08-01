@@ -39,7 +39,8 @@ TEST(AppConfig, DefaultValues) {
     EXPECT_TRUE(c.screenshotDir.empty());
     EXPECT_FALSE(c.startWithWindows);
     EXPECT_TRUE(c.toolbar.visible);
-    EXPECT_EQ(c.toolbar.posX, -1);
+    EXPECT_TRUE(c.toolbar.monitor.empty());
+    EXPECT_TRUE(c.toolbar.placements.empty());
 }
 
 TEST(AppConfig, IniRoundTrip) {
@@ -52,8 +53,6 @@ TEST(AppConfig, IniRoundTrip) {
     orig.timer.durationSeconds = 300;
     orig.screenshotDir = "C:\\Screenshots";
     orig.startWithWindows = true;
-    orig.toolbar.posX = 100;
-    orig.toolbar.posY = 200;
     orig.toolbar.visible = false;
 
     IniFile ini;
@@ -68,8 +67,6 @@ TEST(AppConfig, IniRoundTrip) {
     EXPECT_EQ(back.timer.durationSeconds, 300);
     EXPECT_EQ(back.screenshotDir, "C:\\Screenshots");
     EXPECT_TRUE(back.startWithWindows);
-    EXPECT_EQ(back.toolbar.posX, 100);
-    EXPECT_EQ(back.toolbar.posY, 200);
     EXPECT_FALSE(back.toolbar.visible);
 }
 
@@ -161,6 +158,68 @@ TEST(AppConfig, UnknownKeysIgnored) {
     EXPECT_FLOAT_EQ(c.zoom.defaultZoomLevel, 2.5f);
 }
 
+TEST(ToolbarConfig, MonitorPlacementsRoundTrip) {
+    AppConfig orig;
+    orig.toolbar.monitor = "\\\\.\\DISPLAY2";
+    orig.toolbar.placements["\\\\.\\DISPLAY1"] = POINT{ 10, 20 };
+    orig.toolbar.placements["\\\\.\\DISPLAY2"] = POINT{ 300, 400 };
+
+    IniFile ini;
+    AppConfigToIni(orig, ini);
+    // Through the text form too — device names are full of backslashes
+    IniFile reparsed;
+    reparsed.LoadFromString(ini.SaveToString());
+    AppConfig back = AppConfigFromIni(reparsed);
+
+    EXPECT_EQ(back.toolbar.monitor, "\\\\.\\DISPLAY2");
+    ASSERT_EQ(back.toolbar.placements.size(), 2u);
+    EXPECT_EQ(back.toolbar.placements["\\\\.\\DISPLAY1"].x, 10);
+    EXPECT_EQ(back.toolbar.placements["\\\\.\\DISPLAY1"].y, 20);
+    EXPECT_EQ(back.toolbar.placements["\\\\.\\DISPLAY2"].x, 300);
+    EXPECT_EQ(back.toolbar.placements["\\\\.\\DISPLAY2"].y, 400);
+}
+
+TEST(ToolbarConfig, NegativePlacementOffsetsSurvive) {
+    // A monitor left of the primary has negative virtual-desktop coordinates, but the
+    // stored value is an offset from its own corner, so it must stay non-negative;
+    // a negative offset can still turn up in a hand-edited config.
+    AppConfig orig;
+    orig.toolbar.placements["\\\\.\\DISPLAY3"] = POINT{ -5, -7 };
+
+    IniFile ini;
+    AppConfigToIni(orig, ini);
+    AppConfig back = AppConfigFromIni(ini);
+
+    EXPECT_EQ(back.toolbar.placements["\\\\.\\DISPLAY3"].x, -5);
+    EXPECT_EQ(back.toolbar.placements["\\\\.\\DISPLAY3"].y, -7);
+}
+
+TEST(ToolbarConfig, NoPlacementsSectionLoadsClean) {
+    // Nothing recorded yet: the toolbar has no monitor to return to and falls back
+    // to the primary default at startup.
+    IniFile ini;
+    ini.LoadFromString("[toolbar]\nvisible = 1\n");
+    AppConfig c = AppConfigFromIni(ini);
+
+    EXPECT_TRUE(c.toolbar.visible);
+    EXPECT_TRUE(c.toolbar.monitor.empty());
+    EXPECT_TRUE(c.toolbar.placements.empty());
+}
+
+TEST(ToolbarConfig, MalformedPlacementLinesSkipped) {
+    IniFile ini;
+    ini.LoadFromString(
+        "[toolbar.monitors]\n"
+        "\\\\.\\DISPLAY1 = 10,20\n"
+        "\\\\.\\DISPLAY2 = garbage\n"
+        "\\\\.\\DISPLAY3 = 99\n");
+    AppConfig c = AppConfigFromIni(ini);
+
+    ASSERT_EQ(c.toolbar.placements.size(), 1u);
+    EXPECT_EQ(c.toolbar.placements["\\\\.\\DISPLAY1"].x, 10);
+    EXPECT_EQ(c.toolbar.placements["\\\\.\\DISPLAY1"].y, 20);
+}
+
 TEST(HotkeyConfig, IniRoundTrip) {
     AppConfig orig;
     orig.zoom.hotkey.modifiers = MOD_CONTROL | MOD_SHIFT;
@@ -207,6 +266,19 @@ TEST(IniFile, BoolSetGet) {
     EXPECT_TRUE(ini.GetBool("s", "on"));
     EXPECT_FALSE(ini.GetBool("s", "off"));
     EXPECT_TRUE(ini.GetBool("s", "missing", true));
+}
+
+TEST(IniFile, GetKeys) {
+    IniFile ini;
+    ini.Set("s", "b", "2");
+    ini.Set("s", "a", "1");
+    ini.Set("other", "c", "3");
+
+    std::vector<std::string> keys = ini.GetKeys("s");
+    ASSERT_EQ(keys.size(), 2u);
+    EXPECT_EQ(keys[0], "a");   // sorted
+    EXPECT_EQ(keys[1], "b");
+    EXPECT_TRUE(ini.GetKeys("missing").empty());
 }
 
 TEST(IniFile, ParseComments) {

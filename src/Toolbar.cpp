@@ -49,6 +49,80 @@ static Gdiplus::Bitmap* LoadPngResource(HINSTANCE hInst, int resId) {
     return bmp;
 }
 
+// Move a rect so it sits fully inside `bounds`, keeping its size.
+static void ClampToBounds(RECT& rc, const RECT& bounds) {
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
+    int x = rc.left;
+    int y = rc.top;
+    // Push the far edge in first, then the near edge, so the top-left stays visible
+    // even in the degenerate case of a monitor smaller than the toolbar
+    if (x + w > bounds.right)  x = bounds.right - w;
+    if (x < bounds.left)       x = bounds.left;
+    if (y + h > bounds.bottom) y = bounds.bottom - h;
+    if (y < bounds.top)        y = bounds.top;
+    rc = { x, y, x + w, y + h };
+}
+
+// Identifies a monitor across a display change (e.g. "\\.\DISPLAY1"); empty on failure
+static std::wstring MonitorDeviceName(HMONITOR hMon) {
+    MONITORINFOEXW mi = {};
+    mi.cbSize = sizeof(mi);
+    if (!hMon || !GetMonitorInfoW(hMon, reinterpret_cast<MONITORINFO*>(&mi))) return {};
+    return mi.szDevice;
+}
+
+static BOOL CALLBACK FindMonitorProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam) {
+    auto* found = reinterpret_cast<std::pair<const std::wstring*, HMONITOR>*>(lParam);
+    if (MonitorDeviceName(hMon) == *found->first) {
+        found->second = hMon;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+// The monitor currently attached under this device name, or null if it is gone
+static HMONITOR FindMonitorByName(const std::wstring& name) {
+    if (name.empty()) return nullptr;
+    std::pair<const std::wstring*, HMONITOR> found{ &name, nullptr };
+    EnumDisplayMonitors(nullptr, nullptr, FindMonitorProc, reinterpret_cast<LPARAM>(&found));
+    return found.second;
+}
+
+// Keep a window rect fully inside one monitor, optionally rubber-banding it to the
+// work-area edges on the way. When useAnchor is set the monitor under `anchor` (the
+// dragging cursor) wins, so crossing a boundary with the mouse hands the toolbar to
+// the neighbouring screen instead of pinning it to the edge.
+//
+// snapDistance > 0 makes the work-area edges sticky: anywhere within that many pixels
+// the rect sits flush against the edge, so parking the toolbar exactly on top of the
+// taskbar takes no aim. Pull further than snapDistance and it releases, free to float
+// over the taskbar out to the physical screen edge.
+static void ConstrainRect(RECT& rc, POINT anchor, bool useAnchor, int snapDistance) {
+    HMONITOR hMon = useAnchor
+        ? MonitorFromPoint(anchor, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfoW(hMon, &mi)) return;
+
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
+    int x = rc.left;
+    int y = rc.top;
+
+    if (snapDistance > 0) {
+        const RECT& k = mi.rcWork;
+        // Nearest edge per axis only — a rect can't be flush left and right at once
+        if (abs(x - k.left) <= snapDistance)              x = k.left;
+        else if (abs((x + w) - k.right) <= snapDistance)  x = k.right - w;
+        if (abs(y - k.top) <= snapDistance)               y = k.top;
+        else if (abs((y + h) - k.bottom) <= snapDistance) y = k.bottom - h;
+    }
+
+    rc = { x, y, x + w, y + h };
+    ClampToBounds(rc, mi.rcMonitor);
+}
+
 static const wchar_t* TOOLBAR_CLASS = L"DexPresenterToolbar";
 
 Toolbar::Toolbar(App* app, HINSTANCE hInstance) : m_app(app), m_hInstance(hInstance) {
@@ -64,23 +138,21 @@ Toolbar::Toolbar(App* app, HINSTANCE hInstance) : m_app(app), m_hInstance(hInsta
     }
 
     auto& cfg = app->GetConfig().toolbar;
-    int x = cfg.posX;
-    int y = cfg.posY;
 
-    // Validate saved position is on a visible monitor
-    bool needDefault = (x < 0);
-    if (!needDefault) {
-        RECT checkRect = { x, y, x + TOOLBAR_WIDTH, y + TOOLBAR_HEIGHT };
-        HMONITOR hMon = MonitorFromRect(&checkRect, MONITOR_DEFAULTTONULL);
-        needDefault = !hMon;
-    }
-    if (needDefault) {
-        // Place above the taskbar in the lower-right corner of the primary work area
+    // Back onto the monitor it was left on, at the spot chosen there — or onto the
+    // primary monitor if that one is no longer attached. A fresh config names no
+    // monitor and holds no placements, so it resolves to the primary default corner.
+    POINT pos{};
+    std::wstring device;
+    if (!ResolvePlacement(Utf8ToWide(cfg.monitor), pos, device)) {
+        // No monitor could be queried at all — last-resort primary work area
         RECT workArea;
         SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0);
-        x = workArea.right - TOOLBAR_WIDTH - 8;
-        y = workArea.bottom - TOOLBAR_HEIGHT - 8;
+        pos = { workArea.right - TOOLBAR_WIDTH - TOOLBAR_EDGE_MARGIN,
+                workArea.bottom - TOOLBAR_HEIGHT - TOOLBAR_EDGE_MARGIN };
     }
+    int x = pos.x;
+    int y = pos.y;
 
     m_hwnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED,
@@ -120,6 +192,10 @@ Toolbar::Toolbar(App* app, HINSTANCE hInstance) : m_app(app), m_hInstance(hInsta
     for (int i = 0; i < NUM_BUTTONS; i++)
         m_icons[i] = LoadPngResource(hInstance, iconResIds[i]);
 
+    // Note which monitor we ended up on before anything can move us off it. Not
+    // SavePosition() — that would overwrite cfg.visible, which is read just below.
+    RecordPlacement();
+
     if (cfg.visible) Show();
 }
 
@@ -148,11 +224,73 @@ bool Toolbar::IsVisible() const {
 
 void Toolbar::SavePosition() {
     if (!m_hwnd) return;
+    RecordPlacement();
+    m_app->GetConfig().toolbar.visible = IsVisible();
+}
+
+// Remember this spot as the user's choice for the monitor the toolbar is on, so a
+// display change or a restart can put it back exactly there rather than somewhere
+// merely valid. Persisted with the rest of the config.
+void Toolbar::RecordPlacement() {
+    if (!m_hwnd) return;
     RECT rc;
     GetWindowRect(m_hwnd, &rc);
-    m_app->GetConfig().toolbar.posX = rc.left;
-    m_app->GetConfig().toolbar.posY = rc.top;
-    m_app->GetConfig().toolbar.visible = IsVisible();
+    HMONITOR hMon = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
+    std::wstring device = MonitorDeviceName(hMon);
+    if (device.empty()) return;
+
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfoW(hMon, &mi)) return;
+
+    m_currentDevice = device;
+    auto& cfg = m_app->GetConfig().toolbar;
+    cfg.monitor = WideToUtf8(device);
+    cfg.placements[cfg.monitor] = { rc.left - mi.rcMonitor.left, rc.top - mi.rcMonitor.top };
+}
+
+bool Toolbar::ResolvePlacement(const std::wstring& preferredDevice, POINT& outPos,
+                                std::wstring& outDevice) const {
+    HMONITOR hMon = FindMonitorByName(preferredDevice);
+    if (!hMon) hMon = MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
+
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfoW(hMon, &mi)) return false;
+
+    std::wstring device = MonitorDeviceName(hMon);
+    const auto& placements = m_app->GetConfig().toolbar.placements;
+    auto it = placements.find(WideToUtf8(device));
+
+    POINT pos;
+    if (it != placements.end()) {
+        pos = { mi.rcMonitor.left + it->second.x, mi.rcMonitor.top + it->second.y };
+    } else {
+        // Never used this monitor — the same lower-right corner as a fresh install
+        pos = { mi.rcWork.right - TOOLBAR_WIDTH - TOOLBAR_EDGE_MARGIN,
+                mi.rcWork.bottom - TOOLBAR_HEIGHT - TOOLBAR_EDGE_MARGIN };
+    }
+
+    // The monitor may have changed resolution since the offset was stored
+    RECT rc = { pos.x, pos.y, pos.x + TOOLBAR_WIDTH, pos.y + TOOLBAR_HEIGHT };
+    ClampToBounds(rc, mi.rcMonitor);
+
+    outPos = { rc.left, rc.top };
+    outDevice = device;
+    return true;
+}
+
+// Monitors were added, removed, or rearranged. Stay put if the toolbar's monitor
+// survived; otherwise fall back to the primary one — at the position the user chose
+// there, if they ever placed it there.
+void Toolbar::OnDisplayChange() {
+    if (!m_hwnd) return;
+
+    POINT pos{};
+    std::wstring device;
+    if (!ResolvePlacement(m_currentDevice, pos, device)) return;
+
+    SetWindowPos(m_hwnd, HWND_TOPMOST, pos.x, pos.y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    SavePosition();
+    m_app->SaveConfig();
 }
 
 int Toolbar::HitTest(int x, int y) {
@@ -333,9 +471,23 @@ LRESULT CALLBACK Toolbar::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         return 0;
     }
 
+    case WM_MOVING: {
+        // Constrain the drag so the toolbar is never partly off-screen, and let it
+        // rubber-band onto the taskbar edge on the way
+        RECT* rc = reinterpret_cast<RECT*>(lParam);
+        POINT cursor{};
+        bool useCursor = GetCursorPos(&cursor) && PtInRect(rc, cursor);
+        ConstrainRect(*rc, cursor, useCursor, TOOLBAR_SNAP_DIST);
+        return TRUE;
+    }
+
     case WM_EXITSIZEMOVE:
         self->SavePosition();
         self->m_app->SaveConfig();
+        return 0;
+
+    case WM_DISPLAYCHANGE:
+        self->OnDisplayChange();
         return 0;
 
     case WM_MOUSELEAVE:

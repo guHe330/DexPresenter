@@ -18,6 +18,9 @@ Initial public release.
 - Timer tool: full-screen break countdown (`Ctrl+3`).
 - Snip tool: rectangular screen capture to clipboard and PNG (`Ctrl+6`).
 - Always-on-top draggable toolbar, system tray integration, tabbed settings dialog.
+- Toolbar dragging is confined to the visible screen: it stops at the monitor edges instead of going partly off-screen, and hands over to the neighbouring monitor as the cursor crosses the boundary.
+- The toolbar rubber-bands to the work-area edges while dragging, so resting it flush on top of the taskbar is pixel-perfect; drag more than a few pixels further and it releases and floats over the taskbar.
+- The toolbar remembers where it was placed on each monitor, across restarts. When the display layout changes it stays on its own monitor if that monitor survived, and otherwise returns to the primary monitor at the position it was last placed there. Placements are stored per display device under `[toolbar.monitors]` in `config.ini`, as an offset from that monitor's corner, so rearranging screens does not invalidate them.
 - Optional "Start with Windows" (off by default, owned entirely by the app).
 - Portable single-exe distribution and Inno Setup installer including the complete corresponding source.
 - Build system: C++23, `/W4` warnings, CMake presets, Ninja builds, and support for both MSVC (release compiler) and clang-cl (CI-verified).

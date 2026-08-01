@@ -129,3 +129,5 @@ constexpr int TOOLBAR_NUM_BUTTONS = 5; // 4 tools + close
 constexpr int TOOLBAR_GRIP_WIDTH  = 4;  // visible grip bar
 constexpr int TOOLBAR_GRIP_AREA   = 12; // clickable strip housing the grip (padding + bar + padding)
 constexpr int TOOLBAR_WIDTH       = TOOLBAR_NUM_BUTTONS * (TOOLBAR_BUTTON_SIZE + TOOLBAR_PADDING) + TOOLBAR_PADDING + TOOLBAR_GRIP_AREA;
+constexpr int TOOLBAR_SNAP_DIST   = 12; // Rubber-band range around the work-area edges while dragging
+constexpr int TOOLBAR_EDGE_MARGIN = 8;  // Gap from the work-area corner for a first-run placement

@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <string>
 #include <map>
+#include <vector>
 
 struct HotkeyConfig {
     int modifiers = MOD_CONTROL;
@@ -64,9 +65,17 @@ struct SnipConfig {
 };
 
 struct ToolbarConfig {
-    int posX = -1;  // -1 means center at top edge
-    int posY = 0;   // default: top edge of screen
     bool visible = true;
+
+    // Display device name of the monitor the toolbar was last on (e.g. "\\.\DISPLAY1").
+    // Empty until the toolbar has been placed once; the position itself is the entry
+    // for this device in `placements`, so there is one source of truth for it.
+    std::string monitor;
+
+    // Where the user parked the toolbar on each monitor, keyed by display device name.
+    // Stored as an offset from that monitor's top-left corner, so the placements stay
+    // meaningful when the screens are rearranged and the virtual desktop shifts.
+    std::map<std::string, POINT> placements;
 };
 
 struct AppConfig {
@@ -95,6 +104,11 @@ public:
     int GetInt(const std::string& section, const std::string& key, int defaultVal = 0) const;
     float GetFloat(const std::string& section, const std::string& key, float defaultVal = 0.0f) const;
     bool GetBool(const std::string& section, const std::string& key, bool defaultVal = false) const;
+
+    // Every key present in a section, sorted; empty if the section does not exist.
+    // For sections whose keys are data (per-monitor toolbar placements) rather than
+    // a fixed schema.
+    std::vector<std::string> GetKeys(const std::string& section) const;
 
     void SetInt(const std::string& section, const std::string& key, int value);
     void SetFloat(const std::string& section, const std::string& key, float value);
