@@ -5,7 +5,9 @@ on:
     tags: [ 'v*' ]
 
 permissions:
-  contents: write
+  contents: write      # create the GitHub Release
+  id-token: write      # OIDC token Sigstore uses to sign the provenance
+  attestations: write  # write the attestation to the repo's attestation store
 
 jobs:
   build:
@@ -171,6 +173,20 @@ jobs:
           Write-Error "Installer not found at $setupFile"
           exit 1
         }
+
+    # Build provenance only — this is NOT Authenticode and does nothing for the
+    # SmartScreen warning documented in the README. It lets anyone confirm the
+    # published binaries came out of this tag's Actions run:
+    #   gh attestation verify <file> --repo guHe330/DexPresenter
+    # The bare exe is listed alongside the packages so it stays verifiable after
+    # the portable zip is unpacked (attestations bind to the file digest).
+    - name: Attest build provenance
+      uses: actions/attest@v4
+      with:
+        subject-path: |
+          Portable_DexPresenter.zip
+          DexPresenter_${{ steps.get_version.outputs.version }}_Setup.exe
+          build/Release/DexPresenter.exe
 
     - name: Prepare release notes
       shell: pwsh
