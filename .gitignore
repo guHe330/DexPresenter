@@ -55,6 +55,7 @@ installer/innosetup/output/
 !CHANGELOG.md
 !Distribute/RELEASE_TEMPLATE.md
 !.github/**/*.md
+!docs/plans/*.md
 
 # Claude Code
 .claude/
