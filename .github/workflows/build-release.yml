@@ -9,6 +9,11 @@ permissions:
   id-token: write      # OIDC token Sigstore uses to sign the provenance
   attestations: write  # write the attestation to the repo's attestation store
 
+# Every action is pinned to a full commit SHA, not a tag. Tags are mutable: a
+# compromised upstream could move v4 and run arbitrary code in this job, which
+# holds contents:write and signs the provenance for the published binaries.
+# security-guards.yml fails the build if an unpinned `uses:` ever reappears.
+
 jobs:
   build:
     # Pinned deliberately, NOT windows-latest: release binaries are built with
@@ -19,18 +24,18 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       with:
         fetch-depth: 0  # Fetch all history for tags
 
     - name: Setup MSVC
-      uses: microsoft/setup-msbuild@v2
+      uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
 
     # Pinned, not @latest: an unpinned CMake can raise its minimum-supported
     # cmake_minimum_required out from under us with no warning, exactly how the
     # VS 2026 image roll broke configure. CMakeLists.txt asks for 3.21.
     - name: Setup CMake
-      uses: lukka/get-cmake@v4.4.0
+      uses: lukka/get-cmake@e6906078ebd1ccb8ce51ab4626ac46a1b5a517e3 # v4.4.0
 
     - name: Get version from tag
       id: get_version
@@ -42,50 +47,69 @@ jobs:
         echo "version=$version" >> $env:GITHUB_OUTPUT
         echo "tag=$tag" >> $env:GITHUB_OUTPUT
 
-    - name: Update CMakeLists.txt version
-      shell: pwsh
-      run: |
-        $version = "${{ steps.get_version.outputs.version }}"
-        $cmakePath = "CMakeLists.txt"
-        $content = Get-Content $cmakePath -Raw
-        $content = $content -replace 'project\(DexPresenter VERSION \d+\.\d+\.\d+', "project(DexPresenter VERSION $version"
-        Set-Content $cmakePath -Value $content
-        Write-Host "Updated CMakeLists.txt to version $version"
-
-    - name: Update Version.h
+    # The version is READ from the repository, never written into it. src/Version.h
+    # is the single source of truth (CMakeLists.txt parses it, DexPresenter.rc
+    # includes it), so the tagged commit already describes the binary it produces.
+    # Rewriting these files at build time would mean the published artifacts came
+    # from a tree that exists nowhere in git -- which the provenance attestation
+    # below would then happily vouch for.
+    - name: Verify Version.h matches the tag
       shell: pwsh
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
         $parts = $version -split '\.'
-        $major = $parts[0]
-        $minor = $parts[1]
-        $patch = $parts[2]
-        $versionH = "src/Version.h"
-        $content = Get-Content $versionH -Raw
-        $content = $content -replace '#define DEXPRESENTER_VERSION\s+L"[^"]*"', "#define DEXPRESENTER_VERSION       L""$version"""
-        $content = $content -replace '#define DEXPRESENTER_VERSION_MAJOR \d+', "#define DEXPRESENTER_VERSION_MAJOR $major"
-        $content = $content -replace '#define DEXPRESENTER_VERSION_MINOR \d+', "#define DEXPRESENTER_VERSION_MINOR $minor"
-        $content = $content -replace '#define DEXPRESENTER_VERSION_PATCH \d+', "#define DEXPRESENTER_VERSION_PATCH $patch"
-        Set-Content $versionH -Value $content
-        Write-Host "Updated Version.h to $version"
+        if ($parts.Count -ne 3) { throw "Tag version '$version' is not X.Y.Z" }
+        $major, $minor, $patch = $parts
 
-    - name: Update RC file version
+        $versionH = Get-Content "src/Version.h" -Raw
+
+        if ($versionH -notmatch '#define DEXPRESENTER_VERSION\s+L"([^"]*)"') {
+            throw "Could not find DEXPRESENTER_VERSION in src/Version.h"
+        }
+        if ($Matches[1] -ne $version) {
+            throw "Tag v$version does not match src/Version.h ($($Matches[1])). Bump Version.h and commit it before tagging."
+        }
+
+        $checks = @{
+            'DEXPRESENTER_VERSION_MAJOR' = $major
+            'DEXPRESENTER_VERSION_MINOR' = $minor
+            'DEXPRESENTER_VERSION_PATCH' = $patch
+        }
+        foreach ($name in $checks.Keys) {
+            if ($versionH -notmatch "#define $name\s+(\d+)") { throw "Could not find $name in src/Version.h" }
+            if ($Matches[1] -ne $checks[$name]) {
+                throw "$name is $($Matches[1]) but the tag says $($checks[$name])"
+            }
+        }
+
+        if ($versionH -notmatch '#define DEXPRESENTER_VERSION_COMMA\s+([\d,]+)') {
+            throw "Could not find DEXPRESENTER_VERSION_COMMA in src/Version.h"
+        }
+        if ($Matches[1] -ne "$major,$minor,$patch,0") {
+            throw "DEXPRESENTER_VERSION_COMMA is $($Matches[1]), expected $major,$minor,$patch,0"
+        }
+
+        if ($versionH -notmatch '#define DEXPRESENTER_VERSION_DOTTED\s+"([^"]*)"') {
+            throw "Could not find DEXPRESENTER_VERSION_DOTTED in src/Version.h"
+        }
+        if ($Matches[1] -ne "$major.$minor.$patch.0") {
+            throw "DEXPRESENTER_VERSION_DOTTED is $($Matches[1]), expected $major.$minor.$patch.0"
+        }
+
+        Write-Host "Version OK: src/Version.h is consistent with tag v$version"
+
+    # The release notes are assembled from docs/CHANGELOG.md, so a release cannot ship
+    # without its section having been written. Checked before the build, so the
+    # failure arrives in seconds rather than after a full compile.
+    - name: Verify the changelog has a section for this version
       shell: pwsh
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
-        $parts = $version -split '\.'
-        $major = $parts[0]; $minor = $parts[1]; $patch = $parts[2]
-        $commaVer = "$major,$minor,$patch,0"
-        $dotVer   = "$major.$minor.$patch.0"
-
-        $rcFile = "resources/DexPresenter.rc"
-        $content = Get-Content $rcFile -Raw
-        $content = $content -replace 'FILEVERSION\s+[\d,]+',    "FILEVERSION     $commaVer"
-        $content = $content -replace 'PRODUCTVERSION\s+[\d,]+', "PRODUCTVERSION  $commaVer"
-        $content = $content -replace '"FileVersion",\s+"[^"]*"',    """FileVersion"",       ""$dotVer"""
-        $content = $content -replace '"ProductVersion",\s+"[^"]*"', """ProductVersion"",    ""$dotVer"""
-        Set-Content $rcFile -Value $content
-        Write-Host "Updated $rcFile to $dotVer"
+        $changelog = Get-Content "docs/CHANGELOG.md" -Raw
+        if ($changelog -notmatch "(?m)^## \[$([regex]::Escape($version))\]") {
+            throw "docs/CHANGELOG.md has no '## [$version]' section. Write the release notes before tagging."
+        }
+        Write-Host "docs/CHANGELOG.md has a section for $version"
 
     # No -G: let CMake pick the VS on the runner, so pinning the toolchain is
     # done in one place (runs-on above) rather than two.
@@ -95,38 +119,45 @@ jobs:
     - name: Build Release
       run: cmake --build build --config Release
 
+    # No "skip if missing" fallback: a release that quietly ships untested
+    # binaries because the test exe failed to build is the exact outcome this
+    # step exists to prevent.
     - name: Run Tests
       shell: pwsh
       run: |
         $testExe = "build/Release/DexPresenterTests.exe"
-        if (Test-Path $testExe) {
-          & $testExe
-          if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
-          Write-Host "All tests passed"
-        } else {
-          Write-Host "Test executable not found, skipping tests"
-        }
+        if (-not (Test-Path $testExe)) { throw "Test executable not found at $testExe" }
+        & $testExe
+        if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
+        Write-Host "All tests passed"
 
-    - name: Prepare portable readme
-      shell: pwsh
-      run: |
-        Copy-Item "Distribute/PortableReadme.txt" -Destination "portable_readme.txt"
-        Write-Host "Copied PortableReadme.txt for portable package"
-
-    - name: Create Portable Package
+    # One script owns what "complete corresponding source" means; build.ps1 calls
+    # the same one, so a locally built archive and a released one are identical.
+    # It fails loudly on a missing path or a leaked binary rather than shipping a
+    # short archive, because GPLv3 section 6 makes this a licence obligation.
+    - name: Create GPL source archive
       shell: pwsh
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
+        ./Distribute/New-SourceArchive.ps1 -OutputPath build/DexPresenter_Sources.zip
+        # A second, version-stamped copy is published as its own release asset,
+        # so the source is reachable without downloading a binary first.
+        Copy-Item "build/DexPresenter_Sources.zip" "DexPresenter_${version}_Sources.zip" -Force
 
-        # Create staging directory
-        New-Item -ItemType Directory -Force -Path "package"
+    # The source ships *inside* the portable zip as well as with the installer.
+    # A portable user who never runs Setup still received a binary, and section 6
+    # attaches to that binary regardless of how it was packaged.
+    - name: Create Portable Package
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path "package" | Out-Null
 
-        # Copy files
         Copy-Item "build/Release/DexPresenter.exe" -Destination "package/"
         Copy-Item "LICENSE" -Destination "package/"
-        Copy-Item "portable_readme.txt" -Destination "package/readme.txt"
+        Copy-Item "THIRD_PARTY_NOTICES.txt" -Destination "package/"
+        Copy-Item "build/DexPresenter_Sources.zip" -Destination "package/"
+        Copy-Item "Distribute/PortableReadme.txt" -Destination "package/readme.txt"
 
-        # Create zip
         Compress-Archive -Path "package/*" -DestinationPath "Portable_DexPresenter.zip" -Force
 
         Write-Host "Created Portable_DexPresenter.zip with contents:"
@@ -142,62 +173,86 @@ jobs:
         # VS generator puts output in Release/ subfolder
         Copy-Item "build/Release/DexPresenter.exe" -Destination "build/" -Force
 
-        # Create a complete, buildable source archive for GPL distribution.
-        # Must match the file list in build.ps1 so installer-only recipients
-        # receive the complete corresponding source they can rebuild from.
-        $archiveItems = @(
-          "src",
-          "tests",
-          "resources",
-          "installer",
-          "CMakeLists.txt",
-          "CMakePresets.json",
-          "README.md",
-          "LICENSE",
-          "PRIVACY.md",
-          "build.ps1",
-          ".gitignore"
-        )
-        $filesToZip = $archiveItems | Where-Object { Test-Path $_ }
-        Compress-Archive -Path $filesToZip -DestinationPath "build/DexPresenter_Sources.zip" -Force
+        # build/DexPresenter_Sources.zip was produced by the step above; the .iss
+        # picks it up from there and installs it next to the executable.
 
-        # Inno Setup 6 is pre-installed on windows-latest runners
+        # Inno Setup 6 is pre-installed on the Windows runners
         & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=$version "installer\innosetup\DexPresenter.iss"
         if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
         $setupFile = "installer\innosetup\output\DexPresenter_${version}_Setup.exe"
-        if (Test-Path $setupFile) {
-          Copy-Item $setupFile "DexPresenter_${version}_Setup.exe"
-          Write-Host "Installer created: DexPresenter_${version}_Setup.exe"
-        } else {
-          Write-Error "Installer not found at $setupFile"
-          exit 1
-        }
+        if (-not (Test-Path $setupFile)) { throw "Installer not found at $setupFile" }
+        Copy-Item $setupFile "DexPresenter_${version}_Setup.exe"
+        Write-Host "Installer created: DexPresenter_${version}_Setup.exe"
 
-    # Build provenance only — this is NOT Authenticode and does nothing for the
+    # Build provenance only -- this is NOT Authenticode and does nothing for the
     # SmartScreen warning documented in the README. It lets anyone confirm the
     # published binaries came out of this tag's Actions run:
     #   gh attestation verify <file> --repo guHe330/DexPresenter
     # The bare exe is listed alongside the packages so it stays verifiable after
     # the portable zip is unpacked (attestations bind to the file digest).
     - name: Attest build provenance
-      uses: actions/attest@v4
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
       with:
         subject-path: |
           Portable_DexPresenter.zip
           DexPresenter_${{ steps.get_version.outputs.version }}_Setup.exe
+          DexPresenter_${{ steps.get_version.outputs.version }}_Sources.zip
           build/Release/DexPresenter.exe
 
     - name: Prepare release notes
       shell: pwsh
       run: |
         $version = "${{ steps.get_version.outputs.version }}"
+
+        # Sizes and checksums are measured from the artifacts this run just
+        # produced, so the download table cannot drift from what ships. The
+        # binaries are unsigned, so a SHA-256 is the only integrity check a
+        # downloader can perform before running them.
+        function Format-Size([string]$path) {
+            if (-not (Test-Path $path)) { throw "Cannot size missing artifact: $path" }
+            $bytes = (Get-Item $path).Length
+            # Invariant culture: release notes always read "2.3 MB", never the
+            # runner locale's decimal comma.
+            $inv = [cultureinfo]::InvariantCulture
+            if ($bytes -ge 1MB) { return ($bytes / 1MB).ToString("N1", $inv) + " MB" }
+            return ($bytes / 1KB).ToString("N0", $inv) + " KB"
+        }
+
+        function Get-Sha([string]$path) {
+            if (-not (Test-Path $path)) { throw "Cannot hash missing artifact: $path" }
+            return (Get-FileHash $path -Algorithm SHA256).Hash.ToLower()
+        }
+
+        $setup    = "DexPresenter_${version}_Setup.exe"
+        $portable = "Portable_DexPresenter.zip"
+        $sources  = "DexPresenter_${version}_Sources.zip"
+
+        # Lift this version's section out of docs/CHANGELOG.md: everything between its
+        # own "## [x.y.z]" heading and the next "## " heading.
+        $changelog = Get-Content "docs/CHANGELOG.md" -Raw
+        $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\r\n]*\r?\n(.*?)(?=^## |\z)"
+        if ($changelog -notmatch $pattern) {
+            throw "Could not extract the $version section from docs/CHANGELOG.md"
+        }
+        $whatsNew = $Matches[1].Trim()
+
         $body = Get-Content "Distribute/RELEASE_TEMPLATE.md" -Raw
         $body = $body -replace '\$\{VERSION\}', $version
+        $body = $body -replace '\$\{SETUP_SIZE\}', (Format-Size $setup)
+        $body = $body -replace '\$\{PORTABLE_SIZE\}', (Format-Size $portable)
+        $body = $body -replace '\$\{SETUP_SHA256\}', (Get-Sha $setup)
+        $body = $body -replace '\$\{PORTABLE_SHA256\}', (Get-Sha $portable)
+        $body = $body -replace '\$\{SOURCES_SIZE\}', (Format-Size $sources)
+        # Last, and with a plain replace: changelog text may contain regex
+        # metacharacters and $-sequences that -replace would try to expand.
+        $body = $body.Replace('${CHANGELOG}', $whatsNew)
+
         Set-Content "release_notes.md" -Value $body
+        Write-Host $body
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v3
+      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
       with:
         tag_name: ${{ steps.get_version.outputs.tag }}
         name: DexPresenter ${{ steps.get_version.outputs.tag }}
@@ -205,8 +260,9 @@ jobs:
         files: |
           Portable_DexPresenter.zip
           DexPresenter_${{ steps.get_version.outputs.version }}_Setup.exe
+          DexPresenter_${{ steps.get_version.outputs.version }}_Sources.zip
         draft: false
-        # Alpha status (see README) — flip to false once the project leaves alpha.
+        # Alpha status (see README) -- flip to false once the project leaves alpha.
         prerelease: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
