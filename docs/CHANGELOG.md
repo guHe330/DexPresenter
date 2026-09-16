@@ -2,9 +2,10 @@
 
 All notable changes to DexPresenter are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
 ## [Unreleased]
 
-## [1.0.0] — not yet released
+## [1.0.0] - 2026-09-16
 
 Initial public release.
 
@@ -21,7 +22,7 @@ Initial public release.
 - The toolbar rubber-bands to the work-area edges while dragging, so resting it flush on top of the taskbar is pixel-perfect; drag more than a few pixels further and it releases and floats over the taskbar.
 - The toolbar remembers where it was placed on each monitor, across restarts. When the display layout changes it stays on its own monitor if that monitor survived, and otherwise returns to the primary monitor at the position it was last placed there. Placements are stored per display device under `[toolbar.monitors]` in `config.ini`, as an offset from that monitor's corner, so rearranging screens does not invalidate them.
 - Optional "Start with Windows" (off by default, owned entirely by the app).
-- Portable single-exe distribution and Inno Setup installer including the complete corresponding source.
+- Portable single-exe distribution and Inno Setup installer. Both carry the complete corresponding source, which is also published as its own release asset.
 - Build system: C++23, `/W4` warnings, CMake presets, Ninja builds, and support for both MSVC (release compiler) and clang-cl (CI-verified).
 - Every release artifact is published with a SHA-256 checksum and a GitHub build provenance attestation, so a download can be verified before it is run. The binaries are unsigned, so SmartScreen still warns; this at least makes the download checkable instead of something you have to take on trust. Verify with `Get-FileHash`, or `gh attestation verify <file> --repo guHe330/DexPresenter`.
 - The no-network promise is now enforced by CI rather than only stated: a guard fails the build if any networking API appears in the shipped code, or if a networking library is linked.
