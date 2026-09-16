@@ -165,61 +165,12 @@ if (-not $SkipTests) {
 }
 
 # --- Source Code Archive (for GPL distribution) ---
+# The file list lives in Distribute/New-SourceArchive.ps1, which the release
+# workflow calls too, so a local archive and a released one cannot disagree.
 Write-Host "`n=== Creating Source Code Archive ===" -ForegroundColor Green
 $sourcesZip = Join-Path $buildDir "DexPresenter_Sources.zip"
-
-# Remove old archive if it exists
-if (Test-Path $sourcesZip) {
-    Remove-Item $sourcesZip
-}
-
-# Create archive with source files
-$archiveItems = @(
-    "src",
-    "tests",
-    "resources",
-    "installer",
-    "CMakeLists.txt",
-    "CMakePresets.json",
-    "README.md",
-    "LICENSE",
-    "PRIVACY.md",
-    "build.ps1",
-    ".gitignore"
-)
-
-# Create a temporary list of files to zip
-$tempZipList = Join-Path $env:TEMP "dexpresenter_zip_list.txt"
-$archiveItems | ForEach-Object {
-    if (Test-Path $_) {
-        Add-Content $tempZipList $_
-    }
-}
-
-# Use PowerShell compression (available in Windows 10+)
-if (Get-Command Compress-Archive -ErrorAction SilentlyContinue) {
-    # Compress each item individually
-    $filesToZip = @()
-    foreach ($item in $archiveItems) {
-        if (Test-Path $item) {
-            $filesToZip += $item
-        }
-    }
-
-    if ($filesToZip.Count -gt 0) {
-        Compress-Archive -Path $filesToZip -DestinationPath $sourcesZip -Force
-        if (Test-Path $sourcesZip) {
-            $zipSize = (Get-Item $sourcesZip).Length / 1MB
-            Write-Host "Source archive created: $sourcesZip ($([math]::Round($zipSize, 1)) MB)" -ForegroundColor Green
-        }
-    }
-} else {
-    Write-Warning "Compress-Archive not available. Skipping source archive."
-}
-
-if (Test-Path $tempZipList) {
-    Remove-Item $tempZipList
-}
+& (Join-Path $PSScriptRoot "Distribute/New-SourceArchive.ps1") -OutputPath $sourcesZip
+if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { Write-Error "Source archive failed."; exit 1 }
 
 # --- Installer ---
 if ($BuildInstaller -and $Clang) {
