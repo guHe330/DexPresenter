@@ -66,6 +66,10 @@ include(FetchContent)
 FetchContent_Declare(
     googletest
     URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+    # Pinned by content, not just by URL: a GitHub tag archive is regenerated on
+    # demand and the tag can be moved, so the URL alone does not say what gets
+    # compiled. CMake refuses the download if the hash does not match.
+    URL_HASH SHA256=1f357c27ca988c3f7c6b4bf68a9395005ac6761f034046e9dde0896e3aba00e4
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 set(gtest_force_shared_crt OFF CACHE BOOL "" FORCE)

@@ -1,0 +1,108 @@
+name: Security Guards
+
+# Cheap guards against silently undoing a promise the project makes in public.
+# Runs on every push and pull request, unlike build-release.yml which only fires
+# on a version tag -- by then a regression would already be in a release.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+    # docs/PRIVACY.md promises "no server communication of any kind", and the README
+    # and every release note repeat it. For a tool that captures the screen,
+    # that promise is the product. This makes it a build failure rather than
+    # something a future refactor can quietly walk back.
+    - name: No networking APIs in the shipped code
+      run: |
+        if grep -rniE 'winhttp|wininet|InternetOpen|InternetConnect|URLDownloadToFile|WSAStartup|\bsocket *\(|WSASocket|getaddrinfo|XMLHTTP|IXMLHTTPRequest|curl_easy' \
+             src tests; then
+          echo "::error::Networking API found in the shipped code. DexPresenter promises no network access at all (docs/PRIVACY.md). If this is deliberate, that promise has to change first -- in docs/PRIVACY.md, the README, and this guard."
+          exit 1
+        fi
+        echo "No networking APIs found in src/ or tests/."
+
+    - name: No networking libraries linked
+      run: |
+        if grep -rniE 'winhttp|wininet|ws2_32|urlmon' CMakeLists.txt; then
+          echo "::error::A networking library is being linked. See the note above."
+          exit 1
+        fi
+        echo "No networking libraries linked."
+
+    # src/Version.h is the single source of truth: CMakeLists.txt parses it and
+    # DexPresenter.rc includes it. Its four forms of the same number still have
+    # to agree with each other, and a half-finished bump should fail here rather
+    # than at tag time, when the release is already in flight.
+    - name: Version.h is self-consistent
+      run: |
+        h=src/Version.h
+        ver=$(grep -oP '#define DEXPRESENTER_VERSION\s+L"\K[0-9.]+' "$h")
+        major=$(grep -oP '#define DEXPRESENTER_VERSION_MAJOR\s+\K[0-9]+' "$h")
+        minor=$(grep -oP '#define DEXPRESENTER_VERSION_MINOR\s+\K[0-9]+' "$h")
+        patch=$(grep -oP '#define DEXPRESENTER_VERSION_PATCH\s+\K[0-9]+' "$h")
+        comma=$(grep -oP '#define DEXPRESENTER_VERSION_COMMA\s+\K[0-9,]+' "$h")
+        dotted=$(grep -oP '#define DEXPRESENTER_VERSION_DOTTED\s+"\K[0-9.]+' "$h")
+
+        for name in ver major minor patch comma dotted; do
+          if [ -z "${!name}" ]; then
+            echo "::error::Could not read $name from $h."
+            exit 1
+          fi
+        done
+
+        fail=0
+        [ "$ver" = "$major.$minor.$patch" ] || { echo "::error::DEXPRESENTER_VERSION is $ver but MAJOR/MINOR/PATCH say $major.$minor.$patch."; fail=1; }
+        [ "$comma" = "$major,$minor,$patch,0" ] || { echo "::error::DEXPRESENTER_VERSION_COMMA is $comma, expected $major,$minor,$patch,0."; fail=1; }
+        [ "$dotted" = "$major.$minor.$patch.0" ] || { echo "::error::DEXPRESENTER_VERSION_DOTTED is $dotted, expected $major.$minor.$patch.0."; fail=1; }
+        [ $fail -eq 0 ] || exit 1
+
+        echo "Version.h agrees with itself ($ver)."
+
+    # GPLv3 is the whole licensing story here: inbound contributions are GPLv3
+    # (docs/CLA.md) and outbound distribution is GPLv3. A source file without the
+    # header weakens that, and it is the kind of thing only a machine remembers.
+    - name: Every source file carries the GPL header
+      run: |
+        missing=0
+        while IFS= read -r f; do
+          if ! head -25 "$f" | grep -q 'GNU General Public License'; then
+            echo "::error file=$f::Missing the GPL header from COPYRIGHT.txt."
+            missing=1
+          fi
+        done < <(find src tests -type f \( -name '*.cpp' -o -name '*.h' \))
+        [ $missing -eq 0 ] || exit 1
+        echo "All source files carry the GPL header."
+
+    # DexPresenter ships no third-party code, so it has no SBOM to keep honest.
+    # The one external thing it pulls is the GoogleTest archive, fetched at
+    # configure time on every developer's and every runner's machine. A GitHub
+    # tag archive is regenerated on demand and the tag can be moved, so without
+    # a content hash the URL does not say what actually gets compiled.
+    - name: GoogleTest pinned by content hash
+      run: |
+        if ! grep -qE '^\s*URL_HASH SHA256=[0-9a-f]{64}\s*$' CMakeLists.txt; then
+          echo "::error::The googletest FetchContent_Declare has no URL_HASH SHA256=<64 hex>. Pin the archive by content, not just by URL."
+          exit 1
+        fi
+        echo "GoogleTest is pinned by content hash."
+
+    # A mutable action ref lets a compromised upstream run inside the job that
+    # builds, attests and publishes releases, so pin every action to a commit SHA.
+    - name: Actions pinned to commit SHAs
+      run: |
+        if grep -rnE '^\s*uses:' .github/workflows | grep -vE '@[0-9a-f]{40}(\s|$)'; then
+          echo "::error::Unpinned GitHub Action above. Pin it to a full commit SHA (the version tag goes in a trailing comment)."
+          exit 1
+        fi
+        echo "All actions pinned to commit SHAs."
