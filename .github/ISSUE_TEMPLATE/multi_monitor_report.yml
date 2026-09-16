@@ -1,0 +1,98 @@
+name: Multi-monitor / DPI test report
+description: You have two or more screens, or display scaling, and tried DexPresenter on them. Tell me what happened.
+labels: ["testing", "multi-monitor"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Display behaviour needs **much wider coverage than in-house testing can give it**. The toolbar
+        stores a position per display device and has to survive monitors being rearranged, unplugged or
+        switched off. The Draw, Zoom and Snip overlays capture the whole screen, so display scaling has
+        to be exactly right or strokes land away from the cursor. There are far more arrangements,
+        scaling combinations and hot-plug orders out there than can be reproduced here.
+
+        You do not have to test everything. **One section is a useful report.** Good news is worth
+        posting too: "the toolbar came back on the right screen after undocking" tells me as much as a bug does.
+
+  - type: input
+    id: version
+    attributes:
+      label: DexPresenter version
+      description: Shown in the installer name, on the release page, or in the exe's file properties.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 Pro 24H2 (build 26100.2314)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your display setup
+      description: >
+        Resolution and scaling per monitor, which one is primary, and how they are arranged in
+        Settings → System → Display. Mention a laptop, dock, projector, TV or wireless display if one is involved.
+      placeholder: |
+        Monitor 1 (primary): 3840x2160 @ 150%, centre
+        Monitor 2: 1920x1080 @ 100%, left, rotated portrait
+        Monitor 3: 2560x1440 @ 100%, right
+        Laptop in a Thunderbolt dock, lid closed.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: covered
+    attributes:
+      label: What did you try?
+      options:
+        - label: "A — Toolbar placement: dragged it around each monitor, across a scaling boundary, and up against the taskbar"
+        - label: "B — Toolbar persistence: exited and restarted DexPresenter, and rebooted"
+        - label: "C — Layout changes: changed a resolution, changed the primary monitor, rearranged the displays"
+        - label: "D — Unplug/replug: disconnected a monitor and reconnected it, used Win+P, or undocked and re-docked"
+        - label: "E — Capture accuracy: Draw / Zoom / Snip on a scaled display — is the capture the full screen, and do strokes land under the cursor?"
+        - label: "F — Presenting for real: projector or meeting-room screen, duplicated or extended mid-session"
+        - label: "G — Something else"
+
+  - type: textarea
+    id: results
+    attributes:
+      label: What happened?
+      description: >
+        Per section if you can. What you expected, what you got, and whether it happens every time
+        or only sometimes. Do not spend time bisecting or debugging — "I did X, this happened" is the whole job.
+      placeholder: |
+        A — fine on all three, snapped to the taskbar cleanly even on the 150% screen.
+        E — Zoom on the portrait monitor captured only the top two thirds. Every time.
+        D — unplugging monitor 2 moved the toolbar to the primary as expected, but plugging it back
+            in left it on the primary. Reproduced 3 times out of 3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: config.ini
+      description: >
+        The most valuable attachment for this kind of report — the `[toolbar]` and `[toolbar.monitors]`
+        sections are the ground truth for what got stored per display. Attach
+        `%AppData%\DexPresenter\config.ini` (rename to `.txt` if GitHub refuses the upload). It contains
+        no personal data beyond your screenshot folder path, but do look it over first.
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshots or video
+      description: Drag them into this box. A phone photo of both screens is fine, and often clearer than words.
+
+  - type: checkboxes
+    id: credit
+    attributes:
+      label: Credit
+      options:
+        - label: Credit me by GitHub handle in the changelog for anything this fixes

@@ -21,7 +21,7 @@ It is inspired by [ZoomIt](https://learn.microsoft.com/en-us/windows/powertoys/z
 
 > **A personal project, shared openly.** DexPresenter is built and maintained by a single developer as a passion project. It's not backed by a company or a team, just one person who kept forgetting ZoomIt's hotkeys.
 
-> **Privacy & Trust.** DexPresenter is ad-free, collects no telemetry or user data, and never communicates with any server. Everything the application needs lives in two places on your PC: `Program Files\DexPresenter` and `%AppData%\DexPresenter`. That's it, nothing leaves your machine.
+> **Privacy & Trust.** DexPresenter is ad-free, collects no telemetry or user data, and never communicates with any server. Everything the application needs lives in two places on your PC: `Program Files\DexPresenter` and `%AppData%\DexPresenter`. That's it, nothing leaves your machine. You don't have to take that on trust: [a CI guard](.github/workflows/security-guards.yml) fails the build if any networking API ever appears in the shipped code.
 
 > **Alpha** - This project is in early development. Expect breaking changes, missing features, and rough edges.
 
@@ -105,6 +105,22 @@ The installer includes the complete source code (`DexPresenter_Sources.zip`) in 
 1.  Download `DexPresenter.exe` from the latest release.
 2.  Place it anywhere (e.g. `C:\Program Files\DexPresenter\`).
 3.  Run `DexPresenter.exe`. The toolbar will appear at the top edge of your screen.
+
+### Verifying your download
+
+Every release page publishes a SHA-256 for each artifact:
+
+```powershell
+Get-FileHash DexPresenter_1.0.0_Setup.exe -Algorithm SHA256
+```
+
+Both artifacts also carry a [GitHub build provenance attestation](https://docs.github.com/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds), which ties them to the exact workflow run and commit that produced them. With the [GitHub CLI](https://cli.github.com/):
+
+```powershell
+gh attestation verify DexPresenter_1.0.0_Setup.exe --repo guHe330/DexPresenter
+```
+
+That is a supply-chain check, not a Windows signature — it does not remove the SmartScreen prompt above.
 
 ## Configuration
 
@@ -195,7 +211,13 @@ The code is C++23 and compiles clean at `/W4` on both compilers; please keep it 
 
 ## Contributing
 
-Bug reports and focused pull requests are welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) first; it sets honest expectations for a one-person project and explains the CLA. For security issues see [SECURITY.md](SECURITY.md), for support see [SUPPORT.md](SUPPORT.md), and for release history see [CHANGELOG.md](CHANGELOG.md).
+Bug reports and focused pull requests are welcome — please read [CONTRIBUTING.md](docs/CONTRIBUTING.md) first; it sets honest expectations for a one-person project.
+
+**Testing is the most useful contribution right now.** Development covers one desk. Multiple monitors, mixed DPI scaling, projectors and docks are where DexPresenter is most likely to misbehave and hardest to test in-house — the [multi-monitor / DPI test report](https://github.com/guHe330/DexPresenter/issues/new?template=multi_monitor_report.yml) form takes five minutes, and "it all worked" is worth posting too.
+
+Code contributions are covered by a three-line [CLA](docs/CLA.md): your contribution is under the same GPLv3 as the project, and you keep your copyright. Signing is automated on your first pull request.
+
+For security issues see [SECURITY.md](SECURITY.md), for support see [SUPPORT.md](docs/SUPPORT.md), and for release history see [CHANGELOG.md](docs/CHANGELOG.md).
 
 ## License
 
@@ -205,4 +227,4 @@ The application **icon and image assets** (`resources/DexPresenter.ico` and `res
 
 Third-party components and their licenses are listed in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
 
-For privacy details, see [PRIVACY.md](PRIVACY.md).
+For privacy details, see [PRIVACY.md](docs/PRIVACY.md).
