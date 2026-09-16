@@ -1,6 +1,10 @@
 #include <windows.h>
 #include "resource.h"
 
+// Version macros come from the one place that defines them, so the file version
+// stamped into the exe can never drift from DEXPRESENTER_VERSION.
+#include "../src/Version.h"
+
 // Application icon
 IDI_DEXPRESENTER ICON "DexPresenter.ico"
 
@@ -13,8 +17,8 @@ IDB_TOOLBAR_CLOSE RCDATA "icons/close.png"
 
 // Version information
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,0,0,0
-PRODUCTVERSION  1,0,0,0
+FILEVERSION     DEXPRESENTER_VERSION_COMMA
+PRODUCTVERSION  DEXPRESENTER_VERSION_COMMA
 FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
 FILEFLAGS       0
 FILEOS          VOS_NT_WINDOWS32
@@ -27,12 +31,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",       "DexPresenter"
             VALUE "FileDescription",   "DexPresenter Screen Utility"
-            VALUE "FileVersion",       "1.0.0.0"
+            VALUE "FileVersion",       DEXPRESENTER_VERSION_DOTTED
             VALUE "InternalName",      "DexPresenter"
             VALUE "LegalCopyright",    "Copyright (C) 2026 Gunter Heiss. Licensed under GPLv3."
             VALUE "OriginalFilename",  "DexPresenter.exe"
             VALUE "ProductName",       "DexPresenter"
-            VALUE "ProductVersion",    "1.0.0.0"
+            VALUE "ProductVersion",    DEXPRESENTER_VERSION_DOTTED
         END
     END
     BLOCK "VarFileInfo"

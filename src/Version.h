@@ -21,7 +21,15 @@
 
 #pragma once
 
-#define DEXPRESENTER_VERSION       L"1.0.0"
-#define DEXPRESENTER_VERSION_MAJOR 1
-#define DEXPRESENTER_VERSION_MINOR 0
-#define DEXPRESENTER_VERSION_PATCH 0
+// The single source of truth for the version. CMakeLists.txt parses this file,
+// DexPresenter.rc includes it, and the release workflow refuses to publish a tag
+// that disagrees with it -- so this is the only place a version is ever bumped.
+#define DEXPRESENTER_VERSION        L"1.0.0"
+#define DEXPRESENTER_VERSION_MAJOR  1
+#define DEXPRESENTER_VERSION_MINOR  0
+#define DEXPRESENTER_VERSION_PATCH  0
+
+// VERSIONINFO wants a comma list and a narrow string; both are the same version
+// with a trailing build field of 0, which DexPresenter does not use.
+#define DEXPRESENTER_VERSION_COMMA  1,0,0,0
+#define DEXPRESENTER_VERSION_DOTTED "1.0.0.0"

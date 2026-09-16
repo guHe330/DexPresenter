@@ -1,6 +1,17 @@
 # 3.21+ for CMakePresets.json v3 and C++23 support
 cmake_minimum_required(VERSION 3.21)
-project(DexPresenter VERSION 1.0.0 LANGUAGES CXX)
+# src/Version.h is the single source of truth for the version; read it from
+# there rather than repeating the number, so the two cannot drift apart.
+# Character classes ([.] rather than an escaped dot) keep the regex clear of
+# CMake's own backslash-escaping rules.
+file(STRINGS "src/Version.h" DEXPRESENTER_VERSION_LINE REGEX "DEXPRESENTER_VERSION +L\"")
+string(REGEX MATCH "[0-9]+[.][0-9]+[.][0-9]+" DEXPRESENTER_VERSION "${DEXPRESENTER_VERSION_LINE}")
+if(NOT DEXPRESENTER_VERSION)
+    message(FATAL_ERROR "Could not read DEXPRESENTER_VERSION from src/Version.h")
+endif()
+
+project(DexPresenter VERSION ${DEXPRESENTER_VERSION} LANGUAGES CXX)
+message(STATUS "DexPresenter ${DEXPRESENTER_VERSION} (version read from src/Version.h)")
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
