@@ -54,6 +54,7 @@ installer/innosetup/output/
 !SECURITY.md
 !CHANGELOG.md
 !Distribute/RELEASE_TEMPLATE.md
+!docs/CLA.md
 !.github/**/*.md
 
 # Claude Code
