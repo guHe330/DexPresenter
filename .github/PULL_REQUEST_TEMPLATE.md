@@ -1,5 +1,5 @@
-<!-- Thanks for contributing! Please read docs/CONTRIBUTING.md first — it sets honest
-     expectations about review timelines and explains the CLA (three lines, GPLv3,
+<!-- Thanks for contributing! Please read docs/CONTRIBUTING.md first. It explains
+     review timelines and the CLA (three lines, GPLv3,
      you keep your copyright). -->
 
 ## What does this PR change, and why?
