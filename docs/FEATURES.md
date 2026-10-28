@@ -13,7 +13,7 @@
 
 <img src="images/timer.png" width="240" alt="The full-screen break timer showing 09:57">
 
-<!-- TODO gif: snip tool — dragging a rectangle selection, showing the saved result -->
+![Snip in action: the screen dims and the dragged selection around a chart stays bright, with its size shown in the corner and a magnifier at the cursor](images/snip.png)
 
 ## Drawing
 

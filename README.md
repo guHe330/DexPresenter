@@ -39,6 +39,8 @@ All tools sit in one small toolbar that stays in front of every other window. Dr
 | Zoom  | Capture screen, overlay zoomed view. Mouse to pan, scroll to zoom, ESC to exit.                                    |
 
 <p>
+  <img src="docs/images/snip.png" width="400" alt="Snip in action: the screen dims and the dragged selection around a chart stays bright, with its size shown in the corner and a magnifier at the cursor">
+  &nbsp;
   <img src="docs/images/draw-panel.png" height="260" alt="The Draw right-click panel: shape modes, colors, pen widths, undo, redo and Clear All">
   &nbsp;
   <img src="docs/images/timer.png" width="240" alt="The full-screen break timer">
