@@ -11,9 +11,7 @@
 | Timer | Full-screen countdown timer (default 10 minutes). Scroll to add or remove a minute, click or press any key to close. |
 | Zoom  | Capture screen, overlay zoomed view. Mouse to pan, scroll to zoom, ESC to exit.                                    |
 
-![Zoom in action: scrolling zooms into a bar chart, moving the mouse pans across it, ESC returns to the slide](images/zoom.gif)
-
-![The full-screen break timer showing 09:57](images/timer.png)
+<img src="images/timer.png" width="240" alt="The full-screen break timer showing 09:57">
 
 <!-- TODO gif: snip tool — dragging a rectangle selection, showing the saved result -->
 

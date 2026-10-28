@@ -1,6 +1,6 @@
 # DexPresenter
 
-![A slide annotated with DexPresenter: a red box around three bars, a pink arrow, and a pixelated access token](docs/images/draw.png)
+![DexPresenter: zoom, draw, snip and time your breaks without memorizing a single hotkey. A toolbar above a slide annotated with a red box, an arrow, and a pixelated token.](docs/images/banner.png)
 
 [![CI](https://github.com/guHe330/DexPresenter/actions/workflows/ci.yml/badge.svg)](https://github.com/guHe330/DexPresenter/actions/workflows/ci.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
@@ -27,6 +27,8 @@ It has no ads, collects no telemetry or user data, and never talks to a server. 
 
 ## Tools
 
+All tools sit in one small toolbar that stays in front of every other window. Drag it anywhere, on any monitor, and it stays out of the way of your slides.
+
 ![The DexPresenter toolbar with Snip, Draw, Timer, Zoom and Close buttons](docs/images/toolbar.png)
 
 | Tool  | Description                                                                                                        |
@@ -36,7 +38,11 @@ It has no ads, collects no telemetry or user data, and never talks to a server. 
 | Timer | Full-screen countdown timer (default 10 minutes). Scroll to add or remove a minute, click or press any key to close. |
 | Zoom  | Capture screen, overlay zoomed view. Mouse to pan, scroll to zoom, ESC to exit.                                    |
 
-![Zoom in action: scrolling zooms into a bar chart, moving the mouse pans across it, ESC returns to the slide](docs/images/zoom.gif)
+<p>
+  <img src="docs/images/draw-panel.png" height="260" alt="The Draw right-click panel: shape modes, colors, pen widths, undo, redo and Clear All">
+  &nbsp;
+  <img src="docs/images/timer.png" width="240" alt="The full-screen break timer">
+</p>
 
 The drawing modes, toolbar behavior and screenshot saving are described in [FEATURES.md](docs/FEATURES.md). Settings and `config.ini` are in [CONFIGURATION.md](docs/CONFIGURATION.md).
 
