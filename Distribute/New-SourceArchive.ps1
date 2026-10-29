@@ -44,6 +44,7 @@ $ArchiveItems = @(
     'resources'
     'installer'
     'docs'
+    'Distribute'
     'CMakeLists.txt'
     'CMakePresets.json'
     'CMakeSettings.json'
