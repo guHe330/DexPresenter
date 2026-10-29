@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-09-16
+## [1.0.0] - 2026-10-29
 
 Initial public release.
 
@@ -28,3 +28,4 @@ Initial public release.
 - The no-network promise is now enforced by CI rather than only stated: a guard fails the build if any networking API appears in the shipped code, or if a networking library is linked.
 - Contributing is covered by a three-line, inbound-equals-outbound GPLv3 CLA: contributions are licensed under the same GPLv3 as the project and contributors keep their copyright. Signing is automated on the pull request.
 - A multi-monitor and DPI test report template, for the display setups that cannot be reproduced in-house.
+- The whole tree, including the application icon and image assets, is licensed under the GPLv3.
