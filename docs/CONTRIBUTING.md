@@ -22,7 +22,7 @@ For toolbar position, settings, or persistence bugs, attaching `%AppData%\DexPre
 
 You do not need to write code to help, and right now testing is worth more than code.
 
-DexPresenter is alpha software, and development covers one desk: a handful of monitors at one set of scaling factors. Anything beyond that is untested. The gaps where reports from other setups help most:
+Development of DexPresenter covers one desk: a handful of monitors at one set of scaling factors. Anything beyond that is untested. The gaps where reports from other setups help most:
 
 - **Multiple monitors.** The toolbar remembers a position per display device and has to survive monitors being unplugged, rearranged, or turned off. The [Multi-monitor / DPI test report](https://github.com/guHe330/DexPresenter/issues/new?template=multi_monitor_report.yml) form has a checklist; one completed section is a useful report.
 - **Mixed DPI**, such as a 150% laptop panel next to a 100% external screen. Scaling bugs show up as offset strokes or a cropped capture in Draw, Zoom, and Snip.

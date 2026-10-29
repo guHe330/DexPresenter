@@ -11,15 +11,13 @@ DexPresenter is a small presentation tool for Windows 11: under 500 KB, no telem
 
 Every tool and setting is on the toolbar or a right-click panel, so you don't need to remember hotkeys in the middle of a talk.
 
-> **Alpha.** This project is in early development. Expect breaking changes, missing features, and rough edges.
-
 DexPresenter is built and maintained by one developer in their spare time, someone who kept forgetting ZoomIt's hotkeys. No company or team is behind it.
 
 It has no ads, collects no telemetry or user data, and never talks to a server. Everything it needs is in `Program Files\DexPresenter` and `%AppData%\DexPresenter`. [A CI guard](.github/workflows/security-guards.yml) fails the build if any networking API appears in the shipped code. See [PRIVACY.md](docs/PRIVACY.md).
 
 ## Key information
 
-- Status: Alpha
+- Status: Stable
 - Technology: Native C++23 (Win32 API)
 - Executable size: ~460 KB
 - Platform: Windows 11

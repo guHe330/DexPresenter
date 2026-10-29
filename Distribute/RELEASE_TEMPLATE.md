@@ -1,7 +1,5 @@
 # DexPresenter ${VERSION}
 
-> **Alpha.** This project is in early development. Expect breaking changes, missing features, and rough edges.
-
 ## What's New
 
 ${CHANGELOG}

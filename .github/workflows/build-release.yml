@@ -262,7 +262,6 @@ jobs:
           DexPresenter_${{ steps.get_version.outputs.version }}_Setup.exe
           DexPresenter_${{ steps.get_version.outputs.version }}_Sources.zip
         draft: false
-        # Alpha status (see README) -- flip to false once the project leaves alpha.
-        prerelease: true
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

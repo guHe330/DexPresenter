@@ -1,14 +1,11 @@
 ================================================================================
-                            DexPresenter (Alpha)
+                                  DexPresenter
 ================================================================================
 
 A lightweight presentation tool for Windows: zoom into your screen, draw
 annotations over it, snip a screenshot, or put a full-screen countdown up
 during a break. Everything is reachable from a small always-on-top toolbar,
 so there are no hotkeys to memorize mid-talk.
-
-NOTE: This is an alpha release. Expect breaking changes, missing features,
-and rough edges.
 
 
 ================================================================================
@@ -31,7 +28,7 @@ below for the two other places to clean up).
 KEY INFORMATION
 ================================================================================
 
-Status:         Alpha
+Status:         Stable
 Technology:     Native C++23 (Win32 API)
 Binary Size:    ~460 KB, no runtime dependencies (static CRT)
 Platform:       Windows 11
