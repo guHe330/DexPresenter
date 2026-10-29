@@ -2,7 +2,6 @@
  * DexPresenter - a free and open source Windows presentation utility with drawing tools
  * Copyright (C) 2026 Gunter Heiss
  *
- * For more information see: https://dexpresenter.com
  * The DexPresenter project is hosted on GitHub: https://github.com/guHe330/DexPresenter
  *
  * This program is free software: you can redistribute it and/or modify

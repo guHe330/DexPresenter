@@ -93,6 +93,4 @@ Forks are welcome; that's what the GPL is for.
 
 DexPresenter is licensed under the GPLv3. See [LICENSE](LICENSE).
 
-The application icon and image assets (`resources/DexPresenter.ico` and `resources/icons/`) are not covered by the GPLv3. They remain proprietary to Gunter Heiss under separate terms; see [resources/ICON_LICENSE.txt](resources/ICON_LICENSE.txt). If you fork or redistribute DexPresenter, replace them with your own artwork.
-
 Third-party components and their licenses are listed in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).

@@ -2,8 +2,7 @@ DexPresenter - Third-Party Notices
 ==================================
 
 DexPresenter itself is licensed under the GNU General Public License v3.0
-(see LICENSE). Image assets are excluded from that license and carry separate
-terms (see resources/ICON_LICENSE.txt).
+(see LICENSE), including the application icon and image assets.
 
 This file lists third-party software used by DexPresenter and the licenses
 those components are governed by. Each dependency remains subject to its own
