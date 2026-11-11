@@ -39,9 +39,7 @@ protected:
 private:
     static constexpr UINT_PTR TIMER_ID = 100;
     static constexpr UINT_PTR HINT_TIMER_ID = 101;
-    static constexpr int FLASH_DURATION_MS = 500;      // 500ms per flash (red or white)
-    static constexpr int FLASH_COUNT = 2;              // 2 complete flashes (red+white pairs)
-    static constexpr int FLASH_INTERVAL_MS = 1000;     // 1 second between flashes
+    static constexpr UINT TICK_MS = 250;               // How often the clock is checked
     static constexpr int HINT_VISIBLE_MS = 3000;       // Full opacity duration
     static constexpr int HINT_FADE_MS = 1000;          // Fade-out duration
     static constexpr int HINT_TICK_MS = 50;            // Fade timer interval
@@ -50,8 +48,8 @@ private:
     int m_totalSeconds = 600;
     int m_remainingSeconds = 600;
 
+    ULONGLONG m_endTick = 0;    // GetTickCount64() value at which the countdown reaches zero
     bool m_finished = false;
-    int m_finishElapsedMs = 0;  // Elapsed time since timer finished (for flashing logic)
 
     int m_hintElapsedMs = 0;    // Time since activation (for hint fade)
     bool m_hintVisible = true;

@@ -1091,7 +1091,9 @@ void DrawTool::OnLButtonUp(int x, int y) {
             m_smoothY = SMOOTH_ALPHA * (float)y + (1.0f - SMOOTH_ALPHA) * m_smoothY;
             m_currentElement.points.push_back({ (int)m_smoothX, (int)m_smoothY });
         } else {
-            m_currentElement.endPt = { x, y };
+            // Through the same path as a drag, so a Shift-constrained square or
+            // circle is not replaced by the raw cursor position on release
+            OnMouseMove(x, y);
         }
         m_elements.push_back(std::move(m_currentElement));
         m_undoStack.push_back({ UndoAction::Draw });
@@ -1133,6 +1135,5 @@ void DrawTool::SaveScreenshot() {
     }
 
     std::wstring path = GenerateScreenshotPath(dir, L"DexPresenter_Draw");
-    SaveBitmapAsPng(m_hLayer, path);
-    ShowSaveToast(path);
+    ShowSaveToast(path, SaveBitmapAsPng(m_hLayer, path));
 }

@@ -5,6 +5,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Draw, Snip, and Zoom respond faster to the mouse, most noticeably on 4K and multi-monitor setups and in long drawing sessions: the overlays no longer redo full-screen work on every mouse move.
+- The "Image saved" notification is smaller: only as wide as its text instead of half the screen, and less tall.
+
+### Fixed
+- The break timer could run slow on a busy system, because it counted timer messages rather than checking the clock. It now always ends at the right time.
+- Holding Shift to draw a square or circle lost the constraint at the moment the mouse button was released.
+- If a screenshot could not be written (for example to a folder that no longer exists), the notification still said "Image saved". It now says the save failed.
+- Snip briefly showed its crosshair where the cursor had been the last time Snip was used.
+
 ## [1.0.0] - 2026-10-29
 
 Initial public release.

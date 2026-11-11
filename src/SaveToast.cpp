@@ -20,6 +20,7 @@
 
 #include "SaveToast.h"
 #include "Constants.h"
+#include <algorithm>
 #include <string>
 
 static constexpr int TOAST_VISIBLE_MS = 3000;
@@ -33,6 +34,16 @@ struct ToastData
     std::wstring line2; // directory path
     int elapsedMs = 0;
 };
+
+// Both lines' fonts derive from the box height, so painting and the width
+// measurement in ShowSaveToast cannot disagree
+static HFONT ToastFont(int boxH, bool mainLine)
+{
+    return CreateFontW(-(boxH * (mainLine ? 28 : 20) / 100), 0, 0, 0,
+                       mainLine ? FW_SEMIBOLD : FW_NORMAL, FALSE, FALSE, FALSE,
+                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                       CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+}
 
 static LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -96,13 +107,9 @@ static LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 
         int pad = H / 5;
         int mid = H / 2;
-        int fontSize1 = H * 28 / 100; // ~28% of box height for main line
-        int fontSize2 = H * 20 / 100; // ~20% for directory line
 
         // Line 1: "Image saved: filename.png"  (bright)
-        HFONT hF1 = CreateFontW(-fontSize1, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+        HFONT hF1 = ToastFont(H, true);
         SelectObject(hdcMem, hF1);
         SetTextColor(hdcMem, RGB(Theme::TX_R, Theme::TX_G, Theme::TX_B));
         RECT r1 = {pad, pad, W - pad, mid};
@@ -111,9 +118,7 @@ static LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         DeleteObject(hF1);
 
         // Line 2: directory (grey, smaller)
-        HFONT hF2 = CreateFontW(-fontSize2, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+        HFONT hF2 = ToastFont(H, false);
         SelectObject(hdcMem, hF2);
         SetTextColor(hdcMem, RGB(Theme::TS_R, Theme::TS_G, Theme::TS_B));
         RECT r2 = {pad, mid, W - pad, H - pad};
@@ -142,7 +147,7 @@ static LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-void ShowSaveToast(const std::wstring &path)
+void ShowSaveToast(const std::wstring &path, bool saved)
 {
     static bool registered = false;
     if (!registered)
@@ -184,16 +189,30 @@ void ShowSaveToast(const std::wstring &path)
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
 
-    // Font reference: hints use height/40 on a full overlay; here we pick a fixed
-    // comfortable size that matches — roughly 1/16 of screen height for the box.
-    int boxH = screenH / 16;
-    int boxW = screenW / 2;
+    ToastData *data = new ToastData();
+    data->line1 = (saved ? L"Image saved: " : L"Could not save: ") + filename;
+    data->line2 = dir;
+
+    // A twentieth of the screen height, and only as wide as the text needs (the
+    // box used to be half the screen wide whatever it said)
+    int boxH = (std::max)(screenH / 20, 44);
+    int textW = 0;
+    HDC hdc = GetDC(nullptr);
+    for (bool mainLine : {true, false})
+    {
+        const std::wstring &text = mainLine ? data->line1 : data->line2;
+        HFONT hFont = ToastFont(boxH, mainLine);
+        HFONT hOld = (HFONT)SelectObject(hdc, hFont);
+        SIZE size = {};
+        GetTextExtentPoint32W(hdc, text.c_str(), (int)text.size(), &size);
+        SelectObject(hdc, hOld);
+        DeleteObject(hFont);
+        textW = (std::max)(textW, (int)size.cx);
+    }
+    ReleaseDC(nullptr, hdc);
+    int boxW = (std::min)(textW + 2 * (boxH / 5) + 4, screenW / 2);
     int x = (screenW - boxW) / 2;
     int y = screenH - boxH - screenH / 20;
-
-    ToastData *data = new ToastData();
-    data->line1 = L"Image saved: " + filename;
-    data->line2 = dir;
 
     HWND hwnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE,

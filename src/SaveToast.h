@@ -22,6 +22,7 @@
 #include <Windows.h>
 #include <string>
 
-// Show a brief toast notification (bottom-right corner) with the saved file path.
+// Show a brief toast notification (bottom centre) with the saved file path, or that
+// saving failed.
 // Auto-dismisses after ~3 seconds. Non-blocking.
-void ShowSaveToast(const std::wstring& path);
+void ShowSaveToast(const std::wstring& path, bool saved);
