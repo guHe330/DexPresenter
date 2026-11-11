@@ -117,15 +117,16 @@ LRESULT CALLBACK OverlayWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rc;
         GetClientRect(hwnd, &rc);
-        // Double-buffer
-        HDC hdcMem = CreateCompatibleDC(hdc);
-        HBITMAP hBuf = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
-        HBITMAP hOldBuf = (HBITMAP)SelectObject(hdcMem, hBuf);
-        self->OnPaint(hdcMem, rc.right, rc.bottom);
-        BitBlt(hdc, 0, 0, rc.right, rc.bottom, hdcMem, 0, 0, SRCCOPY);
-        SelectObject(hdcMem, hOldBuf);
-        DeleteObject(hBuf);
-        DeleteDC(hdcMem);
+        // Double-buffer. The buffer is as large as the whole virtual screen and the
+        // window never resizes, so it is kept for the window's lifetime instead of
+        // being allocated and freed on every mouse move.
+        if (!self->m_hdcBuf) {
+            self->m_hdcBuf = CreateCompatibleDC(hdc);
+            self->m_hBuf = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+            self->m_hOldBuf = (HBITMAP)SelectObject(self->m_hdcBuf, self->m_hBuf);
+        }
+        self->OnPaint(self->m_hdcBuf, rc.right, rc.bottom);
+        BitBlt(hdc, 0, 0, rc.right, rc.bottom, self->m_hdcBuf, 0, 0, SRCCOPY);
         EndPaint(hwnd, &ps);
         return 0;
     }
@@ -167,6 +168,13 @@ LRESULT CALLBACK OverlayWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
 
     case WM_DESTROY:
         self->m_hwnd = nullptr;
+        if (self->m_hdcBuf) {
+            SelectObject(self->m_hdcBuf, self->m_hOldBuf);
+            DeleteObject(self->m_hBuf);
+            DeleteDC(self->m_hdcBuf);
+            self->m_hdcBuf = nullptr;
+            self->m_hBuf = nullptr;
+        }
         return 0;
     }
 

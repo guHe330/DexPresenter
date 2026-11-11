@@ -63,5 +63,10 @@ private:
     HWND m_hwnd = nullptr;
     HINSTANCE m_hInstance = nullptr;
     bool m_classRegistered = false;
+
+    // Paint back buffer, owned from the first WM_PAINT until WM_DESTROY
+    HDC m_hdcBuf = nullptr;
+    HBITMAP m_hBuf = nullptr;
+    HBITMAP m_hOldBuf = nullptr;
     std::function<void()> m_dismissCallback;
 };
