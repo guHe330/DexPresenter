@@ -158,6 +158,7 @@ void TimerTool::OnPaint(HDC hdc, int width, int height) {
 void TimerTool::OnTimer(UINT_PTR id) {
     if (id == HINT_TIMER_ID) {
         m_hintElapsedMs += HINT_TICK_MS;
+        if (m_hintElapsedMs < HINT_VISIBLE_MS) return;  // nothing changes on screen until the fade starts
         if (m_hintElapsedMs >= HINT_VISIBLE_MS + HINT_FADE_MS) {
             m_hintVisible = false;
             KillTimer(GetHwnd(), HINT_TIMER_ID);
