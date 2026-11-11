@@ -21,6 +21,7 @@
 #pragma once
 #include "OverlayWindow.h"
 #include "Config.h"
+#include <memory>
 
 class ZoomTool : public OverlayWindow {
 public:
@@ -36,7 +37,7 @@ protected:
     void OnDismissed() override;
 
 private:
-    HBITMAP m_hScreen = nullptr;
+    std::unique_ptr<Gdiplus::Bitmap> m_bitmap;  // the captured screen
     float m_zoomLevel = 2.0f;
     POINT m_panCenter = {};
     ZoomConfig m_config;

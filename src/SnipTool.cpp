@@ -28,13 +28,38 @@ void SnipTool::OnActivated() {
     int x, y, w, h;
     m_hScreen = CaptureScreen(x, y, w, h);
     m_selecting = false;
+    m_hasCursor = false;  // no crosshair at the previous session's position
     SetCursor(LoadCursor(nullptr, IDC_CROSS));
+
+    // Dim a copy of the capture once. Alpha-blending the whole virtual screen on
+    // every mouse move is by far the most expensive thing the paint used to do.
+    HDC hdcScreen = GetDC(nullptr);
+    HDC hdcSrc = CreateCompatibleDC(hdcScreen);
+    HDC hdcDst = CreateCompatibleDC(hdcScreen);
+    m_hDimmed = CreateCompatibleBitmap(hdcScreen, w, h);
+    HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
+    HBITMAP hOldDst = (HBITMAP)SelectObject(hdcDst, m_hDimmed);
+    BitBlt(hdcDst, 0, 0, w, h, hdcSrc, 0, 0, SRCCOPY);
+    {
+        Gdiplus::Graphics graphics(hdcDst);
+        Gdiplus::SolidBrush dimBrush(Gdiplus::Color(100, 0, 0, 0));
+        graphics.FillRectangle(&dimBrush, 0, 0, w, h);
+    }
+    SelectObject(hdcSrc, hOldSrc);
+    SelectObject(hdcDst, hOldDst);
+    DeleteDC(hdcSrc);
+    DeleteDC(hdcDst);
+    ReleaseDC(nullptr, hdcScreen);
 }
 
 void SnipTool::OnDismissed() {
     if (m_hScreen) {
         DeleteObject(m_hScreen);
         m_hScreen = nullptr;
+    }
+    if (m_hDimmed) {
+        DeleteObject(m_hDimmed);
+        m_hDimmed = nullptr;
     }
 }
 
@@ -48,19 +73,16 @@ RECT SnipTool::NormalizeRect(POINT a, POINT b) {
 }
 
 void SnipTool::OnPaint(HDC hdc, int width, int height) {
-    if (!m_hScreen) return;
+    if (!m_hScreen || !m_hDimmed) return;
 
-    // Draw captured screen
+    // The pre-dimmed capture as the backdrop, then the undimmed original stays
+    // selected for the selection area and the loupe below
     HDC hdcSrc = CreateCompatibleDC(hdc);
-    HBITMAP hOld = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
+    HBITMAP hOld = (HBITMAP)SelectObject(hdcSrc, m_hDimmed);
     BitBlt(hdc, 0, 0, width, height, hdcSrc, 0, 0, SRCCOPY);
-    SelectObject(hdcSrc, hOld);
-    DeleteDC(hdcSrc);
+    SelectObject(hdcSrc, m_hScreen);
 
-    // Dim the entire screen
     Gdiplus::Graphics graphics(hdc);
-    Gdiplus::SolidBrush dimBrush(Gdiplus::Color(100, 0, 0, 0));
-    graphics.FillRectangle(&dimBrush, 0, 0, width, height);
 
     // If selecting, draw the selected region at full brightness
     if (m_selecting) {
@@ -70,11 +92,7 @@ void SnipTool::OnPaint(HDC hdc, int width, int height) {
 
         if (sw > 0 && sh > 0) {
             // Redraw the selection area from original (undimmed)
-            HDC hdcSrc2 = CreateCompatibleDC(hdc);
-            HBITMAP hOld2 = (HBITMAP)SelectObject(hdcSrc2, m_hScreen);
-            BitBlt(hdc, sel.left, sel.top, sw, sh, hdcSrc2, sel.left, sel.top, SRCCOPY);
-            SelectObject(hdcSrc2, hOld2);
-            DeleteDC(hdcSrc2);
+            BitBlt(hdc, sel.left, sel.top, sw, sh, hdcSrc, sel.left, sel.top, SRCCOPY);
 
             // Draw selection border
             Gdiplus::Pen borderPen(Gdiplus::Color(255, 0, 120, 215), 2.0f);
@@ -100,13 +118,11 @@ void SnipTool::OnPaint(HDC hdc, int width, int height) {
     }
 
     // Draw magnifier loupe near cursor (after selection so it's on top)
-    if (m_hasCursor && m_hScreen) {
-        HDC hdcMagSrc = CreateCompatibleDC(hdc);
-        HBITMAP hOldMagSrc = (HBITMAP)SelectObject(hdcMagSrc, m_hScreen);
-        DrawMagnifier(graphics, hdcMagSrc, m_cursorPt.x, m_cursorPt.y, width, height);
-        SelectObject(hdcMagSrc, hOldMagSrc);
-        DeleteDC(hdcMagSrc);
-    }
+    if (m_hasCursor)
+        DrawMagnifier(graphics, hdcSrc, m_cursorPt.x, m_cursorPt.y, width, height);
+
+    SelectObject(hdcSrc, hOld);
+    DeleteDC(hdcSrc);
 }
 
 void SnipTool::OnMouseMove(int x, int y) {
@@ -136,14 +152,21 @@ void SnipTool::OnLButtonUp(int x, int y) {
         int sh = sel.bottom - sel.top;
 
         if (sw > 2 && sh > 2) {
-            CopyRegionToClipboard(sel);
-            SaveRegionToFile(sel);
+            HBITMAP hSnip = CropSelection(sel);
+            SaveToFile(hSnip);  // first: the clipboard takes ownership of the bitmap
+            if (OpenClipboard(nullptr)) {
+                EmptyClipboard();
+                SetClipboardData(CF_BITMAP, hSnip);
+                CloseClipboard();
+            } else {
+                DeleteObject(hSnip);
+            }
         }
         Dismiss();
     }
 }
 
-void SnipTool::CopyRegionToClipboard(RECT sel) {
+HBITMAP SnipTool::CropSelection(RECT sel) {
     int w = sel.right - sel.left;
     int h = sel.bottom - sel.top;
 
@@ -157,39 +180,13 @@ void SnipTool::CopyRegionToClipboard(RECT sel) {
     BitBlt(hdcDst, 0, 0, w, h, hdcSrc, sel.left, sel.top, SRCCOPY);
     SelectObject(hdcSrc, hOldSrc);
     SelectObject(hdcDst, hOldDst);
-
-    if (OpenClipboard(nullptr)) {
-        EmptyClipboard();
-        SetClipboardData(CF_BITMAP, hSnip);
-        CloseClipboard();
-        // Clipboard owns hSnip now, don't delete it
-    } else {
-        DeleteObject(hSnip);
-    }
-
     DeleteDC(hdcSrc);
     DeleteDC(hdcDst);
     ReleaseDC(nullptr, hdcScreen);
+    return hSnip;
 }
 
-void SnipTool::SaveRegionToFile(RECT sel) {
-    int w = sel.right - sel.left;
-    int h = sel.bottom - sel.top;
-
-    HDC hdcScreen = GetDC(nullptr);
-    HDC hdcSrc = CreateCompatibleDC(hdcScreen);
-    HDC hdcDst = CreateCompatibleDC(hdcScreen);
-    HBITMAP hSnip = CreateCompatibleBitmap(hdcScreen, w, h);
-
-    HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
-    HBITMAP hOldDst = (HBITMAP)SelectObject(hdcDst, hSnip);
-    BitBlt(hdcDst, 0, 0, w, h, hdcSrc, sel.left, sel.top, SRCCOPY);
-    SelectObject(hdcSrc, hOldSrc);
-    SelectObject(hdcDst, hOldDst);
-    DeleteDC(hdcSrc);
-    DeleteDC(hdcDst);
-    ReleaseDC(nullptr, hdcScreen);
-
+void SnipTool::SaveToFile(HBITMAP hSnip) {
     std::wstring dir;
     if (!m_screenshotDir.empty()) {
         dir = Utf8ToWide(m_screenshotDir);
@@ -199,7 +196,6 @@ void SnipTool::SaveRegionToFile(RECT sel) {
 
     std::wstring path = GenerateScreenshotPath(dir, L"DexPresenter_Snip");
     SaveBitmapAsPng(hSnip, path);
-    DeleteObject(hSnip);
     ShowSaveToast(path);
 }
 

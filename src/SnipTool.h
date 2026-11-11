@@ -37,12 +37,13 @@ protected:
     void OnDismissed() override;
 
 private:
-    void CopyRegionToClipboard(RECT sel);
-    void SaveRegionToFile(RECT sel);
+    HBITMAP CropSelection(RECT sel);
+    void SaveToFile(HBITMAP hSnip);
     void DrawMagnifier(Gdiplus::Graphics& g, HDC hdcScreen, int cx, int cy, int width, int height);
     RECT NormalizeRect(POINT a, POINT b);
 
     HBITMAP m_hScreen = nullptr;
+    HBITMAP m_hDimmed = nullptr;  // m_hScreen darkened, the backdrop outside the selection
     SnipConfig m_config;
     std::string m_screenshotDir;
     bool m_selecting = false;
