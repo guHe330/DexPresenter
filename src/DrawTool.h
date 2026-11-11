@@ -32,37 +32,6 @@ struct DrawElement {
     POINT endPt = {};           // For shapes
     COLORREF color = RGB(255, 0, 0);
     int width = 3;
-    mutable HBITMAP hObfuscateCache = nullptr;  // cached render for Obfuscate type
-
-    ~DrawElement() { if (hObfuscateCache) { DeleteObject(hObfuscateCache); hObfuscateCache = nullptr; } }
-    DrawElement() = default;
-    // Copy: don't copy the cache (it will be recomputed on next draw)
-    DrawElement(const DrawElement& o)
-        : type(o.type), points(o.points), startPt(o.startPt), endPt(o.endPt),
-          color(o.color), width(o.width) {}
-    DrawElement& operator=(const DrawElement& o) {
-        if (this != &o) {
-            if (hObfuscateCache) { DeleteObject(hObfuscateCache); hObfuscateCache = nullptr; }
-            type = o.type; points = o.points; startPt = o.startPt; endPt = o.endPt;
-            color = o.color; width = o.width;
-        }
-        return *this;
-    }
-    // Move: transfer the cache
-    DrawElement(DrawElement&& o) noexcept
-        : type(o.type), points(std::move(o.points)), startPt(o.startPt), endPt(o.endPt),
-          color(o.color), width(o.width), hObfuscateCache(o.hObfuscateCache) {
-        o.hObfuscateCache = nullptr;
-    }
-    DrawElement& operator=(DrawElement&& o) noexcept {
-        if (this != &o) {
-            if (hObfuscateCache) DeleteObject(hObfuscateCache);
-            type = o.type; points = std::move(o.points); startPt = o.startPt; endPt = o.endPt;
-            color = o.color; width = o.width; hObfuscateCache = o.hObfuscateCache;
-            o.hObfuscateCache = nullptr;
-        }
-        return *this;
-    }
 };
 
 struct UndoAction {
@@ -92,8 +61,9 @@ protected:
     void OnDismissed() override;
 
 private:
-    void DrawAllElements(Gdiplus::Graphics& graphics);
-    void DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& elem, bool useCache = false);
+    void RebuildLayer();
+    void EraseAt(int x, int y);
+    void DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& elem);
     void DrawArrowShape(Gdiplus::Graphics& graphics, POINT start, POINT end, COLORREF color, int width);
     void DrawSmoothCurve(Gdiplus::Graphics& graphics, const ::DrawElement& elem);
     int EraserHitTest(int x, int y) const;
@@ -101,7 +71,6 @@ private:
     void Redo();
     void ClearAll();
     void SaveScreenshot();
-    HBITMAP CompositeFinalImage();
 
     // Context menu
     void ShowContextMenu(int x, int y);
@@ -116,6 +85,11 @@ private:
     void SaveCurrentStyle();
 
     HBITMAP m_hScreen = nullptr;
+    // The capture with every committed element drawn on it. Rebuilt only when
+    // m_elements changes, so a paint costs one blit plus the stroke in progress
+    // however many elements there are. Also what gets saved on exit.
+    HBITMAP m_hLayer = nullptr;
+    bool m_layerDirty = true;
     DrawConfig m_config;
     std::string m_screenshotDir;
     COLORREF m_penColor = RGB(255, 0, 0);

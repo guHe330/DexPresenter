@@ -121,6 +121,7 @@ void DrawTool::OnActivated() {
     m_elements.clear();
     m_undoStack.clear();
     m_redoStack.clear();
+    m_layerDirty = true;
     m_drawing = false;
     m_menuVisible = false;
     m_hintElapsedMs = 0;
@@ -157,23 +158,60 @@ void DrawTool::OnDismissed() {
         DeleteObject(m_hScreen);
         m_hScreen = nullptr;
     }
+    if (m_hLayer) {
+        DeleteObject(m_hLayer);
+        m_hLayer = nullptr;
+    }
     m_elements.clear();
+}
+
+void DrawTool::RebuildLayer() {
+    if (!m_hScreen) return;
+
+    BITMAP bm;
+    GetObject(m_hScreen, sizeof(bm), &bm);
+
+    HDC hdcScreen = GetDC(nullptr);
+    if (!m_hLayer) m_hLayer = CreateCompatibleBitmap(hdcScreen, bm.bmWidth, bm.bmHeight);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, m_hLayer);
+
+    HDC hdcSrc = CreateCompatibleDC(hdcScreen);
+    HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
+    BitBlt(hdcMem, 0, 0, bm.bmWidth, bm.bmHeight, hdcSrc, 0, 0, SRCCOPY);
+    SelectObject(hdcSrc, hOldSrc);
+    DeleteDC(hdcSrc);
+
+    {
+        Gdiplus::Graphics graphics(hdcMem);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        for (auto& elem : m_elements)
+            DrawElement(graphics, elem);
+    }
+
+    SelectObject(hdcMem, hOld);
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
+    m_layerDirty = false;
 }
 
 void DrawTool::OnPaint(HDC hdc, int width, int height) {
     if (!m_hScreen) return;
+    if (m_layerDirty) RebuildLayer();
 
-    // Draw captured screen
+    // Capture plus everything already drawn
     HDC hdcSrc = CreateCompatibleDC(hdc);
-    HBITMAP hOld = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
+    HBITMAP hOld = (HBITMAP)SelectObject(hdcSrc, m_hLayer);
     BitBlt(hdc, 0, 0, width, height, hdcSrc, 0, 0, SRCCOPY);
     SelectObject(hdcSrc, hOld);
     DeleteDC(hdcSrc);
 
-    // Draw elements on top using GDI+
-    Gdiplus::Graphics graphics(hdc);
-    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    DrawAllElements(graphics);
+    // The stroke in progress on top (an eraser drag has none)
+    if (m_drawing && m_shapeMode != ShapeMode::Eraser) {
+        Gdiplus::Graphics graphics(hdc);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        DrawElement(graphics, m_currentElement);
+    }
 
     // Context menu
     if (m_menuVisible) {
@@ -237,14 +275,7 @@ void DrawTool::OnPaint(HDC hdc, int width, int height) {
     }
 }
 
-void DrawTool::DrawAllElements(Gdiplus::Graphics& graphics) {
-    for (auto& elem : m_elements)
-        DrawElement(graphics, elem, true);   // committed: use cache
-    if (m_drawing)
-        DrawElement(graphics, m_currentElement, false);  // in-progress: no cache
-}
-
-void DrawTool::DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& elem, bool useCache) {
+void DrawTool::DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& elem) {
     Gdiplus::Color color(255, GetRValue(elem.color), GetGValue(elem.color), GetBValue(elem.color));
     Gdiplus::Pen pen(color, (float)elem.width);
     pen.SetStartCap(Gdiplus::LineCapRound);
@@ -277,118 +308,82 @@ void DrawTool::DrawElement(Gdiplus::Graphics& graphics, const ::DrawElement& ele
         break;
     }
     case ShapeMode::Obfuscate: {
-        int left = (std::min)(elem.startPt.x, elem.endPt.x);
-        int top = (std::min)(elem.startPt.y, elem.endPt.y);
+        BITMAP bm;
+        GetObject(m_hScreen, sizeof(bm), &bm);
+
+        int left = (std::max)((std::min)(elem.startPt.x, elem.endPt.x), 0L);
+        int top = (std::max)((std::min)(elem.startPt.y, elem.endPt.y), 0L);
         int right = (std::max)(elem.startPt.x, elem.endPt.x);
         int bottom = (std::max)(elem.startPt.y, elem.endPt.y);
         if (right - left < 2 || bottom - top < 2) break;
 
-        int bx0 = left / OBFUSCATE_PIXEL_SIZE;
-        int bx1 = right / OBFUSCATE_PIXEL_SIZE;
-        int by0 = top / OBFUSCATE_PIXEL_SIZE;
-        int by1 = bottom / OBFUSCATE_PIXEL_SIZE;
-        int px_left = bx0 * OBFUSCATE_PIXEL_SIZE;
-        int py_top  = by0 * OBFUSCATE_PIXEL_SIZE;
-        int cache_w = (bx1 - bx0 + 1) * OBFUSCATE_PIXEL_SIZE;
-        int cache_h = (by1 - by0 + 1) * OBFUSCATE_PIXEL_SIZE;
+        // The mosaic covers whole blocks of a screen-wide grid, clipped to the capture
+        constexpr int N = OBFUSCATE_PIXEL_SIZE;
+        int x0 = left / N * N;
+        int y0 = top / N * N;
+        int w = (std::min)((right / N + 1) * N, (int)bm.bmWidth) - x0;
+        int h = (std::min)((bottom / N + 1) * N, (int)bm.bmHeight) - y0;
+        if (w <= 0 || h <= 0) break;
 
-        // Use cached bitmap if available, otherwise compute it
-        if (useCache && elem.hObfuscateCache) {
-            HDC hdc = graphics.GetHDC();
-            HDC hdcCache = CreateCompatibleDC(hdc);
-            HBITMAP hOld = (HBITMAP)SelectObject(hdcCache, elem.hObfuscateCache);
-            BitBlt(hdc, px_left, py_top, cache_w, cache_h, hdcCache, 0, 0, SRCCOPY);
-            SelectObject(hdcCache, hOld);
-            DeleteDC(hdcCache);
-            graphics.ReleaseHDC(hdc);
-            break;
-        }
-
-        // Read entire source bitmap in one call (much faster than GetPixel per pixel)
-        BITMAP bm;
-        GetObject(m_hScreen, sizeof(bm), &bm);
-        int sw = bm.bmWidth, sh = bm.bmHeight;
-
+        // Pull only that region of the capture into a DIB, average each block in
+        // place, and blit it back. (Reading the whole screen with GetDIBits here
+        // cost tens of megabytes per mouse move while dragging.)
         BITMAPINFO bmi = {};
         bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth       = sw;
-        bmi.bmiHeader.biHeight      = -sh;  // top-down
+        bmi.bmiHeader.biWidth       = w;
+        bmi.bmiHeader.biHeight      = -h;  // top-down
         bmi.bmiHeader.biPlanes      = 1;
         bmi.bmiHeader.biBitCount    = 32;
         bmi.bmiHeader.biCompression = BI_RGB;
 
-        std::vector<BYTE> srcPixels(sw * sh * 4);
-        {
-            HDC hdcSrc = CreateCompatibleDC(nullptr);
-            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
-            GetDIBits(hdcSrc, m_hScreen, 0, sh, srcPixels.data(), &bmi, DIB_RGB_COLORS);
-            SelectObject(hdcSrc, hOldBmp);
-            DeleteDC(hdcSrc);
-        }
-
-        // Build the obfuscated image into a DIB section (all in-memory, no GDI per-pixel)
-        BITMAPINFO bmiCache = {};
-        bmiCache.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-        bmiCache.bmiHeader.biWidth       = cache_w;
-        bmiCache.bmiHeader.biHeight      = -cache_h;
-        bmiCache.bmiHeader.biPlanes      = 1;
-        bmiCache.bmiHeader.biBitCount    = 32;
-        bmiCache.bmiHeader.biCompression = BI_RGB;
-
         void* pBits = nullptr;
-        HBITMAP hNewCache = CreateDIBSection(nullptr, &bmiCache, DIB_RGB_COLORS, &pBits, nullptr, 0);
-        if (!hNewCache) break;
-        BYTE* dst = (BYTE*)pBits;
+        HBITMAP hDib = CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+        if (!hDib) break;
 
-        for (int bx = bx0; bx <= bx1; bx++) {
-            for (int by = by0; by <= by1; by++) {
-                int px0 = bx * OBFUSCATE_PIXEL_SIZE;
-                int py0 = by * OBFUSCATE_PIXEL_SIZE;
-                // Average all pixels in this block from the source buffer
-                long sumR = 0, sumG = 0, sumB = 0, count = 0;
-                for (int py = py0; py < py0 + OBFUSCATE_PIXEL_SIZE && py < sh; py++) {
-                    for (int px = px0; px < px0 + OBFUSCATE_PIXEL_SIZE && px < sw; px++) {
-                        int idx = (py * sw + px) * 4;
-                        sumB += srcPixels[idx + 0];
-                        sumG += srcPixels[idx + 1];
-                        sumR += srcPixels[idx + 2];
-                        count++;
+        HDC hdc = graphics.GetHDC();
+        HDC hdcDib = CreateCompatibleDC(hdc);
+        HDC hdcSrc = CreateCompatibleDC(hdc);
+        HBITMAP hOldDib = (HBITMAP)SelectObject(hdcDib, hDib);
+        HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
+        BitBlt(hdcDib, 0, 0, w, h, hdcSrc, x0, y0, SRCCOPY);
+        SelectObject(hdcSrc, hOldSrc);
+        DeleteDC(hdcSrc);
+        GdiFlush();  // the blit must have landed before pBits is read
+
+        BYTE* px = (BYTE*)pBits;
+        for (int by = 0; by < h; by += N) {
+            for (int bx = 0; bx < w; bx += N) {
+                int bx1 = (std::min)(bx + N, w);
+                int by1 = (std::min)(by + N, h);
+                long sumR = 0, sumG = 0, sumB = 0;
+                for (int y = by; y < by1; y++) {
+                    for (int x = bx; x < bx1; x++) {
+                        const BYTE* p = px + (y * w + x) * 4;
+                        sumB += p[0];
+                        sumG += p[1];
+                        sumR += p[2];
                     }
                 }
-                if (!count) continue;
-                BYTE avgR = (BYTE)(sumR / count);
-                BYTE avgG = (BYTE)(sumG / count);
+                long count = (bx1 - bx) * (by1 - by);
                 BYTE avgB = (BYTE)(sumB / count);
-                // Fill block into cache DIB
-                int dstX0 = px0 - px_left;
-                int dstY0 = py0 - py_top;
-                for (int cy = 0; cy < OBFUSCATE_PIXEL_SIZE && (py0 + cy) < sh; cy++) {
-                    int row = (dstY0 + cy) * cache_w;
-                    for (int cx = 0; cx < OBFUSCATE_PIXEL_SIZE && (px0 + cx) < sw; cx++) {
-                        int di = (row + dstX0 + cx) * 4;
-                        dst[di + 0] = avgB;
-                        dst[di + 1] = avgG;
-                        dst[di + 2] = avgR;
-                        dst[di + 3] = 255;
+                BYTE avgG = (BYTE)(sumG / count);
+                BYTE avgR = (BYTE)(sumR / count);
+                for (int y = by; y < by1; y++) {
+                    for (int x = bx; x < bx1; x++) {
+                        BYTE* p = px + (y * w + x) * 4;
+                        p[0] = avgB;
+                        p[1] = avgG;
+                        p[2] = avgR;
                     }
                 }
             }
         }
 
-        // Blit the result to the output
-        HDC hdc = graphics.GetHDC();
-        HDC hdcCache = CreateCompatibleDC(hdc);
-        HBITMAP hOld = (HBITMAP)SelectObject(hdcCache, hNewCache);
-        BitBlt(hdc, px_left, py_top, cache_w, cache_h, hdcCache, 0, 0, SRCCOPY);
-        SelectObject(hdcCache, hOld);
-        DeleteDC(hdcCache);
+        BitBlt(hdc, x0, y0, w, h, hdcDib, 0, 0, SRCCOPY);
+        SelectObject(hdcDib, hOldDib);
+        DeleteDC(hdcDib);
+        DeleteObject(hDib);
         graphics.ReleaseHDC(hdc);
-
-        // Store for future frames
-        if (useCache)
-            elem.hObfuscateCache = hNewCache;
-        else
-            DeleteObject(hNewCache);
         break;
     }
     case ShapeMode::Eraser:
@@ -907,6 +902,7 @@ void DrawTool::Undo() {
         m_redoStack.push_back(std::move(redoAction));
         m_elements.insert(m_elements.begin() + idx, std::move(action.erasedElement));
     }
+    m_layerDirty = true;
     Invalidate();
 }
 
@@ -926,6 +922,7 @@ void DrawTool::Redo() {
         m_undoStack.push_back(std::move(undoAction));
         m_elements.erase(m_elements.begin() + idx);
     }
+    m_layerDirty = true;
     Invalidate();
 }
 
@@ -933,6 +930,22 @@ void DrawTool::ClearAll() {
     m_elements.clear();
     m_undoStack.clear();
     m_redoStack.clear();
+    m_layerDirty = true;
+    Invalidate();
+}
+
+// Remove the topmost element under the cursor, if any
+void DrawTool::EraseAt(int x, int y) {
+    int idx = EraserHitTest(x, y);
+    if (idx < 0) return;
+    UndoAction action;
+    action.type = UndoAction::Erase;
+    action.erasedIndex = idx;
+    action.erasedElement = std::move(m_elements[idx]);
+    m_undoStack.push_back(std::move(action));
+    m_redoStack.clear();
+    m_elements.erase(m_elements.begin() + idx);
+    m_layerDirty = true;
     Invalidate();
 }
 
@@ -965,17 +978,7 @@ void DrawTool::OnMouseMove(int x, int y) {
 
     // Eraser drag: remove elements as cursor passes over them
     if (m_drawing && m_shapeMode == ShapeMode::Eraser) {
-        int idx = EraserHitTest(x, y);
-        if (idx >= 0) {
-            UndoAction action;
-            action.type = UndoAction::Erase;
-            action.erasedIndex = idx;
-            action.erasedElement = std::move(m_elements[idx]);
-            m_undoStack.push_back(std::move(action));
-            m_redoStack.clear();
-            m_elements.erase(m_elements.begin() + idx);
-            Invalidate();
-        }
+        EraseAt(x, y);
         return;
     }
 
@@ -1055,17 +1058,7 @@ void DrawTool::OnLButtonDown(int x, int y) {
     // Eraser mode: drag to erase elements under the cursor
     if (m_shapeMode == ShapeMode::Eraser) {
         m_drawing = true;
-        int idx = EraserHitTest(x, y);
-        if (idx >= 0) {
-            UndoAction action;
-            action.type = UndoAction::Erase;
-            action.erasedIndex = idx;
-            action.erasedElement = std::move(m_elements[idx]);
-            m_undoStack.push_back(std::move(action));
-            m_redoStack.clear();
-            m_elements.erase(m_elements.begin() + idx);
-            Invalidate();
-        }
+        EraseAt(x, y);
         SetCapture(GetHwnd());
         return;
     }
@@ -1105,6 +1098,7 @@ void DrawTool::OnLButtonUp(int x, int y) {
         m_redoStack.clear();
         m_currentElement = {};
         m_drawing = false;
+        m_layerDirty = true;
         ReleaseCapture();
         Invalidate();
     }
@@ -1126,41 +1120,10 @@ void DrawTool::OnRButtonDown(int x, int y) {
 // Screenshot compositing & saving
 // ==========================================================================
 
-HBITMAP DrawTool::CompositeFinalImage() {
-    if (!m_hScreen) return nullptr;
-
-    BITMAP bm;
-    GetObject(m_hScreen, sizeof(bm), &bm);
-    int w = bm.bmWidth, h = bm.bmHeight;
-
-    HDC hdcScreen = GetDC(nullptr);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    HBITMAP hResult = CreateCompatibleBitmap(hdcScreen, w, h);
-    HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hResult);
-
-    HDC hdcSrc = CreateCompatibleDC(hdcScreen);
-    HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcSrc, m_hScreen);
-    BitBlt(hdcMem, 0, 0, w, h, hdcSrc, 0, 0, SRCCOPY);
-    SelectObject(hdcSrc, hOldSrc);
-    DeleteDC(hdcSrc);
-
-    {
-        Gdiplus::Graphics graphics(hdcMem);
-        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        for (auto& elem : m_elements)
-            DrawElement(graphics, elem);
-    }
-
-    SelectObject(hdcMem, hOld);
-    DeleteDC(hdcMem);
-    ReleaseDC(nullptr, hdcScreen);
-
-    return hResult;
-}
-
 void DrawTool::SaveScreenshot() {
-    HBITMAP hComposite = CompositeFinalImage();
-    if (!hComposite) return;
+    // The layer is exactly the image to save: the capture plus every element
+    if (m_layerDirty) RebuildLayer();
+    if (!m_hLayer) return;
 
     std::wstring dir;
     if (!m_screenshotDir.empty()) {
@@ -1170,7 +1133,6 @@ void DrawTool::SaveScreenshot() {
     }
 
     std::wstring path = GenerateScreenshotPath(dir, L"DexPresenter_Draw");
-    SaveBitmapAsPng(hComposite, path);
-    DeleteObject(hComposite);
+    SaveBitmapAsPng(m_hLayer, path);
     ShowSaveToast(path);
 }
