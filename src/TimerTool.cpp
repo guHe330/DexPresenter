@@ -26,10 +26,10 @@ void TimerTool::OnActivated() {
     m_totalSeconds = m_config.durationSeconds;
     m_remainingSeconds = m_totalSeconds;
     m_finished = false;
-    m_finishElapsedMs = 0;
+    m_endTick = GetTickCount64() + m_totalSeconds * 1000ULL;
     m_hintElapsedMs = 0;
     m_hintVisible = true;
-    SetTimer(GetHwnd(), TIMER_ID, 1000, nullptr);
+    SetTimer(GetHwnd(), TIMER_ID, TICK_MS, nullptr);
     SetTimer(GetHwnd(), HINT_TIMER_ID, HINT_TICK_MS, nullptr);
 }
 
@@ -41,28 +41,9 @@ void TimerTool::OnDismissed() {
 }
 
 void TimerTool::OnPaint(HDC hdc, int width, int height) {
-    // Determine background color based on finish state
-    int bgR = 0, bgG = 0, bgB = 0;  // Default: black
-
-    if (m_finished) {
-        // Flash pattern: 2 cycles of (red + white), then constant white
-        int totalFlashMs = FLASH_COUNT * 2 * FLASH_DURATION_MS;  // 2000ms for 2 flashes
-        int cycleTime = m_finishElapsedMs % totalFlashMs;
-
-        // Each cycle: 500ms red, 500ms white
-        if (cycleTime < FLASH_DURATION_MS) {
-            bgR = 255; bgG = 0; bgB = 0;      // Red
-        } else if (cycleTime < FLASH_DURATION_MS * 2) {
-            bgR = 255; bgG = 255; bgB = 255;  // White
-        } else if (cycleTime < FLASH_DURATION_MS * 3) {
-            bgR = 255; bgG = 0; bgB = 0;      // Red (2nd flash)
-        } else {
-            bgR = 255; bgG = 255; bgB = 255;  // White (then stays white)
-        }
-    }
-
+    // Black while counting, red once the time is up
     RECT rc = { 0, 0, width, height };
-    HBRUSH hBrush = CreateSolidBrush(RGB(bgR, bgG, bgB));
+    HBRUSH hBrush = CreateSolidBrush(m_finished ? RGB(255, 0, 0) : RGB(0, 0, 0));
     FillRect(hdc, &rc, hBrush);
     DeleteObject(hBrush);
 
@@ -169,20 +150,13 @@ void TimerTool::OnTimer(UINT_PTR id) {
 
     if (id != TIMER_ID) return;
 
-    if (!m_finished) {
-        m_remainingSeconds--;
-        if (m_remainingSeconds <= 0) {
-            m_remainingSeconds = 0;
-            m_finished = true;
-            m_finishElapsedMs = 0;
-        }
-    } else {
-        // Timer finished: track elapsed time for flashing
-        m_finishElapsedMs += 1000;  // Timer fires every 1000ms
-
-        // Total flash duration: 2 flashes * 2 phases (red+white) * 500ms = 2000ms
-        // Then continue flashing indefinitely
-    }
+    // Count against the clock, not the number of WM_TIMER messages: those are
+    // low-priority and get delayed or dropped while the message loop is busy, so
+    // counting them made a long countdown run slow.
+    int remaining = SecondsRemaining(m_endTick, GetTickCount64());
+    if (m_finished || (remaining == m_remainingSeconds && remaining > 0)) return;
+    m_remainingSeconds = remaining;
+    m_finished = (remaining == 0);
     Invalidate();
 }
 
@@ -205,12 +179,8 @@ void TimerTool::OnMouseWheel(int delta, bool /*ctrlHeld*/) {
     if (minutes > 1440) minutes = 1440;  // 1440 minutes = 24 hours
 
     m_remainingSeconds = minutes * 60;
-
-    // Reset finish state so timer can continue
-    if (m_finished) {
-        m_finished = false;
-        m_finishElapsedMs = 0;
-    }
+    m_endTick = GetTickCount64() + m_remainingSeconds * 1000ULL;
+    m_finished = false;  // so a finished timer can continue
 
     Invalidate();
 }

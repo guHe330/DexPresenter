@@ -195,8 +195,7 @@ void SnipTool::SaveToFile(HBITMAP hSnip) {
     }
 
     std::wstring path = GenerateScreenshotPath(dir, L"DexPresenter_Snip");
-    SaveBitmapAsPng(hSnip, path);
-    ShowSaveToast(path);
+    ShowSaveToast(path, SaveBitmapAsPng(hSnip, path));
 }
 
 void SnipTool::DrawMagnifier(Gdiplus::Graphics& g, HDC hdcScreen, int cx, int cy, int width, int height) {

@@ -37,6 +37,11 @@ std::wstring FormatTime(int totalSeconds) {
     return buf;
 }
 
+int SecondsRemaining(ULONGLONG endTick, ULONGLONG now) {
+    if (now >= endTick) return 0;
+    return static_cast<int>((endTick - now + 999) / 1000);
+}
+
 std::wstring Utf8ToWide(const std::string& str) {
     if (str.empty()) return L"";
     int len = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);

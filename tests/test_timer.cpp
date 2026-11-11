@@ -48,3 +48,11 @@ TEST(FormatTime, ExactlyOneHour) {
 TEST(FormatTime, NegativeClampedToZero) {
     EXPECT_EQ(FormatTime(-5), L"00:00");
 }
+
+TEST(SecondsRemaining, RoundsUpAndStopsAtZero) {
+    EXPECT_EQ(SecondsRemaining(10000, 0), 10);
+    EXPECT_EQ(SecondsRemaining(10000, 1), 10);     // 9.999 s left still reads 10
+    EXPECT_EQ(SecondsRemaining(10000, 9001), 1);
+    EXPECT_EQ(SecondsRemaining(10000, 10000), 0);
+    EXPECT_EQ(SecondsRemaining(10000, 25000), 0);  // long past the deadline
+}

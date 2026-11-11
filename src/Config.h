@@ -90,6 +90,10 @@ struct AppConfig {
 // Utility: format seconds as MM:SS or H:MM:SS
 std::wstring FormatTime(int totalSeconds);
 
+// Whole seconds left until endTick, rounded up so a countdown shows 0 only once
+// the deadline has passed. Both arguments are GetTickCount64() milliseconds.
+int SecondsRemaining(ULONGLONG endTick, ULONGLONG now);
+
 // Convert UTF-8 std::string to std::wstring
 std::wstring Utf8ToWide(const std::string& str);
 // Convert std::wstring to UTF-8 std::string
