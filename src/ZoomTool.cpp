@@ -24,7 +24,11 @@
 
 void ZoomTool::OnActivated() {
     int x, y, w, h;
-    m_hScreen = CaptureScreen(x, y, w, h);
+    HBITMAP hScreen = CaptureScreen(x, y, w, h);
+    // GDI+ copies the pixels when wrapping an HBITMAP. Do that once here, not on
+    // every paint, where it meant a full-screen copy per mouse move.
+    m_bitmap = std::make_unique<Gdiplus::Bitmap>(hScreen, nullptr);
+    DeleteObject(hScreen);
     m_zoomLevel = m_config.defaultZoomLevel;
     GetCursorPos(&m_panCenter);
     // Convert from screen coords to bitmap coords
@@ -33,19 +37,14 @@ void ZoomTool::OnActivated() {
 }
 
 void ZoomTool::OnDismissed() {
-    if (m_hScreen) {
-        DeleteObject(m_hScreen);
-        m_hScreen = nullptr;
-    }
+    m_bitmap.reset();
 }
 
 void ZoomTool::OnPaint(HDC hdc, int width, int height) {
-    if (!m_hScreen) return;
+    if (!m_bitmap) return;
 
     Gdiplus::Graphics graphics(hdc);
     graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-
-    Gdiplus::Bitmap bitmap(m_hScreen, nullptr);
 
     float srcW = width / m_zoomLevel;
     float srcH = height / m_zoomLevel;
@@ -58,7 +57,7 @@ void ZoomTool::OnPaint(HDC hdc, int width, int height) {
     if (srcX + srcW > m_screenW) srcX = m_screenW - srcW;
     if (srcY + srcH > m_screenH) srcY = m_screenH - srcH;
 
-    graphics.DrawImage(&bitmap,
+    graphics.DrawImage(m_bitmap.get(),
         Gdiplus::RectF(0, 0, (float)width, (float)height),
         srcX, srcY, srcW, srcH,
         Gdiplus::UnitPixel);
